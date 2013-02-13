@@ -3,6 +3,8 @@ ec2
 
 ec2 is a simple shell script that helps you out to log into your EC2 instances just picking them from a list.
 
+![Screenshot](https://raw.github.com/sirio7g/ec2/master/docs/login.png "Screenshot")
+
 # Setting up
 
 ec2 script is built on top of boto library so, first of all, install them using pip:
