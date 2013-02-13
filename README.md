@@ -43,3 +43,5 @@ Arguments:
 ```
 
 ec2 allows to run command (by ssh) on a server or even onto a list of servers using the “-c” argument, look at the example below:
+
+![Screenshot](https://raw.github.com/sirio7g/ec2/master/docs/logini2.png "Screenshot")
