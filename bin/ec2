@@ -1,0 +1,128 @@
+#!/bin/sh
+. ~/.ec2-default.props
+
+# Init variables
+infoOpt="N"
+xOpt=""
+
+# Extract options
+while getopts "u:k:c:ixh" opt; do
+  case $opt in
+    u)
+      userOpt=$OPTARG
+      ;;
+    k)
+      keyOpt=$OPTARG
+      ;;
+    c)
+      commandOpt=$OPTARG
+      ;;
+    i)
+      infoOpt="Y"
+      ;;
+    x)
+      xOpt="-X"
+      ;;
+    h)
+      echo "\nDisplay and connect easely to your EC2 instance(s)"
+      echo "Usage: $0 [-u user] [-x] [-c \"command\"] [eu|us|us-west-1|region]"
+      echo "\nArguments:"
+      echo "\t-u user"
+      echo "\t-k PEM file"
+      echo "\t-x Export display"
+      echo "\t-c \"command (sent by ssh)\""
+      echo "\nAll the arguments are optional, set the default properties in ec2-defaults.props"
+      exit 1
+      ;;
+    \?)
+      echo "\033[1;32mInvalid option: -$OPTARG\033[0m" >&2
+      ;;
+  esac
+done
+shift $(($OPTIND - 1))
+
+# Set default variables
+if [ "$1" = "" ]
+then
+  region=$DEFAULT_REGION
+else
+  region=$1
+fi
+
+if [ "$1" = "eu" ]
+then
+  if [ "$keyOpt" != "" ]
+  then
+    key=$keyOpt
+  else
+    key=$DEFAULT_EU_PEM
+  fi
+  region=$DEFAULT_EU
+elif [ "$1" = "us" ]
+then
+  if [ "$keyOpt" != "" ]
+  then
+    key=$keyOpt
+  else
+    key=$DEFAULT_US_PEM
+  fi
+  region=$DEFAULT_US
+fi
+
+if [ "$keyOpt" != "" ]
+then
+    key=$keyOpt
+else
+    key=$DEFAULT_PEM
+fi
+
+if [ "$userOpt" != "" ]
+then
+  user=$userOpt
+else
+  user=$DEFAULT_USER
+fi
+
+# Print info and quit
+if [ "$infoOpt" = "Y" ]
+then
+  echo "\033[32mRegion: $region\033[0m"
+  ec2-host-ih -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY $region
+  exit 1
+fi
+
+# Get hostname
+hosts=`ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY $region`
+name="`echo "$hosts" | awk {'print $1'}`"
+hostname=`echo "$hosts" | awk {'print $2'}`
+
+index=0
+for i in $name
+do
+  index=`expr $index + 1`
+  address=`echo "$hostname" | head -$index | tail -1`
+  echo "\033[33m$index. \033[32;1m$i\033[0m ($address)"
+done
+
+# Prompt for instance number(s)
+echo -n "Pick your option(s) (use space to specify more instances, i.e: 1 2 3 4): "
+read range
+
+for input in $range
+do
+  index=0
+  for i in $hostname
+  do
+    index=`expr $index + 1`
+    if [ "$index" = "$input" ]
+    then
+      selectedhost=`echo $i`
+      selectedname=`echo "$name" | head -$index | tail -1`
+    fi
+  done
+
+  # Run ssh
+  echo "\033[32mConnecting to $selectedname \033[0m"
+  echo "\033[33mssh -i $key $xOpt $user@$selectedhost\033[0m"
+  ssh -o StrictHostKeyChecking=no -i $key $xOpt $user@$selectedhost $commandOpt
+done

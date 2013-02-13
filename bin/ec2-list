@@ -1,0 +1,78 @@
+#!/usr/bin/python
+
+import os
+import sys
+import getopt
+from sys import stderr
+import boto
+import boto.ec2
+
+_conn = None
+
+# get instance detailed information
+def getInstancesList():
+  instancesList = []
+  for reservation in _conn.get_all_instances():
+    instancesList.extend(reservation.instances)
+  return instancesList
+
+# print out instances list
+def printInstances():
+  instance_pairs = []
+  for instance in getInstancesList():
+      if instance.state == "running":
+          instance_name = instance.tags.get("Name")
+          if instance.public_dns_name:
+              pair = (instance_name, instance.public_dns_name, instance.id, instance.private_ip_address, instance.ip_address, instance.instance_type)
+              instance_pairs.append(pair)
+          else:
+              if instance.ip_address:
+                  pair = (instance_name, instance.ip_address, instance.id, instance.private_ip_address, instance.ip_address, instance.instance_type)
+                  instance_pairs.append(pair)
+  for pair in sorted(instance_pairs, key=lambda p: p[0]):
+      print "%s\t%s\t%s\t%s\t%s\t%s" % pair
+
+# parse given parameters
+def main(argv):
+    try:
+        opts, args = getopt.getopt(argv, "Lk:s:", ["aws-key", "aws-secret"])
+    except getopt.GetoptError, err:
+        print >>sys.stderr, err
+        sys.exit(2)
+
+    aws_key = os.environ.get("AWS_ACCESS_KEY_ID")
+    aws_secret = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    argc = len(args)
+
+    for opt, arg in opts:
+        if opt in("-k", "--aws-key"):
+            aws_key = arg
+        elif opt in("-s", "--aws-secret"):
+            aws_secret = arg
+
+    if not aws_key or not aws_secret:
+        if not aws_key:
+            print >>sys.stderr,\
+            "AWS_ACCESS_KEY_ID not set or given as argument"
+
+        if not aws_secret:
+            print >>sys.stderr,\
+            "AWS_SECRET_ACCESS_KEY not set or given as argument"
+
+        if argc < 1:
+            print >>stderr, "Error: region not specified, please give it as argument"
+
+        sys.exit(2)
+
+    global _conn
+
+    if argc < 1:
+       print >>stderr, "Error: region not specified"
+    else:
+       _conn = boto.ec2.connect_to_region(args[0])
+       printInstances()
+       sys.exit()
+
+# run program
+if __name__ == "__main__":
+    main(sys.argv[1:])

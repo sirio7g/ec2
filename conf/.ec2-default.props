@@ -1,0 +1,27 @@
+#
+# AWS credentials 
+#
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+
+#
+# Default settings
+#
+
+# Default ssh user
+DEFAULT_USER=ubuntu
+
+# Default certificate used along with the above user
+DEFAULT_PEM="~/my.pem"
+
+# Default region (set the most frequently used)
+DEFAULT_REGION=eu-west-1
+
+# Shortcut for EU and US
+# Typing "ec2 eu" or "ec2 us" the following value will be used 
+DEFAULT_EU="eu-west-1"
+DEFAULT_EU_PEM="~/my-eu.pem"
+
+DEFAULT_US="us-west-1"
+DEFAULT_US_PEM="~/my-us.pem"
+
