@@ -1,5 +1,5 @@
 #!/bin/sh
-. ~/.ec2-default.props
+. $EC2_SCRIPT_HOME/conf/.ec2-default.props
 
 # Init variables
 infoOpt="N"
@@ -95,7 +95,7 @@ then
 fi
 
 # Get hostname
-hosts=`ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY $region`
+hosts=`python $EC2_SCRIPT_HOME/bin/ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY $region`
 name="`echo "$hosts" | awk 'BEGIN { FS = "\t" } ; { print $1 }'`"
 hostname="`echo "$hosts" | awk 'BEGIN { FS = "\t" } ; { print $2 }'`"
 
