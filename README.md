@@ -37,7 +37,7 @@ change the python version according to your own.
 Since ec2 script wants to be a very quick shortcut to jump into your instances, it uses a property file in order to load default settings as default username, default pem file, default region, etc., then edit the configuration file:
 
 ```
-vi conf/.ec2-default.props ~
+vi conf/.ec2-default.props
 ```
 
 Then you have to add the ec2 directory to your PATH env variable:
@@ -56,7 +56,7 @@ ec2 [-i] [-u user] [-x] [-c "command"] [eu|us|us-west-1|region]
 
 Arguments:
 	-u user
-        -i print instances's details
+	-i print instances's details
 	-k PEM file
 	-x Export display
 	-c "command (sent by ssh)"
