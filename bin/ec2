@@ -90,7 +90,7 @@ echo "\033[33mRegion: $region\033[0m"
 # Print info and quit
 if [ "$infoOpt" = "Y" ]
 then
-  ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY $region
+  python $EC2_SCRIPT_HOME/bin/ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY $region
   exit 1
 fi
 

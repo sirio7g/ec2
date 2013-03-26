@@ -34,16 +34,17 @@ change the python version according to your own.
 
 ## Edit the configuration file
 
-Since ec2 script wants to be a very quick shortcut to jump into your instances, it uses a property file in order to load default settings as default username, default pem file, default region, etc. then move .ec2-default.props in your home directory and edit it:
+Since ec2 script wants to be a very quick shortcut to jump into your instances, it uses a property file in order to load default settings as default username, default pem file, default region, etc., then edit the configuration file:
 
 ```
-mv conf/.ec2-default.props ~
+vi conf/.ec2-default.props ~
 ```
 
 Then you have to add the ec2 directory to your PATH env variable:
 
 ```
-export PATH=$PATH:/path_of_ec2/bin/
+export EC2_SCRIPT_HOME=/path_of_ec2/
+export PATH=$PATH:$EC2_SCRIPT_HOME/bin
 ```
 
 you can do it persistent by adding the above line to your .bash_profile or .profile file in your home directory.
