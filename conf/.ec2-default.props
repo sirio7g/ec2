@@ -25,3 +25,6 @@ DEFAULT_EU_PEM="~/my-eu.pem"
 DEFAULT_US="us-west-1"
 DEFAULT_US_PEM="~/my-us.pem"
 
+export AWS_ACCESS_KEY_ID
+export AWS_SECRET_ACCESS_KEY
+
