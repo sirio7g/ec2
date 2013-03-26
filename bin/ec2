@@ -1,5 +1,5 @@
 #!/bin/sh
-. ~/.ec2-default.props
+. $EC2_SCRIPT_HOME/conf/.ec2-default.props
 
 # Init variables
 infoOpt="N"
