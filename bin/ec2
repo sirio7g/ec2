@@ -100,14 +100,12 @@ name="`echo "$hosts" | awk 'BEGIN { FS = "\t" } ; { print $1 }'`"
 hostname="`echo "$hosts" | awk 'BEGIN { FS = "\t" } ; { print $2 }'`"
 
 index=0
-IFS=$'\n'
 for i in $name
 do
   index=`expr $index + 1`
   address=`echo "$hostname" | head -$index | tail -1`
   echo "\033[33m$index. \033[32;1m$i\033[0m ($address)"
 done
-unset IFS
 
 # Prompt for instance number(s)
 echo -n "Pick your option(s) (use space to specify more instances, i.e: 1 2 3 4): "
