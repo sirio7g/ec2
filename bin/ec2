@@ -6,7 +6,7 @@ infoOpt="N"
 xOpt=""
 
 # Extract options
-while getopts "u:k:c:ixh" opt; do
+while getopts "u:k:c:n:ixh" opt; do
   case $opt in
     u)
       userOpt=$OPTARG
@@ -20,8 +20,11 @@ while getopts "u:k:c:ixh" opt; do
     i)
       infoOpt="Y"
       ;;
-    x)
+    x) 
       xOpt="-X"
+      ;;
+    n) 
+      nameOpt=$OPTARG
       ;;
     h)
       echo "\nDisplay and connect easely to your EC2 instance(s)"
@@ -32,6 +35,7 @@ while getopts "u:k:c:ixh" opt; do
       echo "\t-k PEM file"
       echo "\t-x Export display"
       echo "\t-c \"command (sent by ssh)\""
+      echo "\t-n \"name\""
       echo "\nAll the arguments are optional, set the default properties in ~/.ec2-default.props"
       exit 1
       ;;
@@ -99,17 +103,39 @@ hosts=`python $EC2_SCRIPT_HOME/bin/ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET
 name="`echo "$hosts" | awk 'BEGIN { FS = "\t" } ; { print $1 }'`"
 hostname="`echo "$hosts" | awk 'BEGIN { FS = "\t" } ; { print $2 }'`"
 
-index=0
-for i in $name
-do
-  index=`expr $index + 1`
-  address=`echo "$hostname" | head -$index | tail -1`
-  echo "\033[33m$index. \033[32;1m$i\033[0m ($address)"
-done
+if [ "$nameOpt" != "" ]
+then
 
-# Prompt for instance number(s)
-echo -n "Pick your option(s) (use space to specify more instances, i.e: 1 2 3 4): "
-read range
+	index=0
+	for i in $name
+	do
+		index=`expr $index + 1`
+		if [ "$nameOpt" = "$i" ]
+		then 
+			range="$index"	
+		fi
+	done
+
+	if [ "$range" = "" ]
+	then
+		echo "Host $nameOpt not found" 
+	fi
+
+else
+
+	index=0
+	for i in $name
+	do
+		index=`expr $index + 1`
+		address=`echo "$hostname" | head -$index | tail -1`
+		echo "\033[33m$index. \033[32;1m$i\033[0m ($address)"
+	done
+
+	# Prompt for instance number(s)
+	echo -n "Pick your option(s) (use space to specify more instances, i.e: 1 2 3 4): "
+	read range
+fi
+
 
 for input in $range
 do
