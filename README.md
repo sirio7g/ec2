@@ -60,7 +60,7 @@ Arguments:
 	-k PEM file
 	-x Export display
 	-c "command (sent by ssh)"
-	-n "name"
+	-n "the instance name you want to connect"
 ```
 
 ec2 allows to run command (by ssh) on a server or even onto a list of servers using the “-c” argument, look at the example below:
@@ -117,7 +117,7 @@ Direct connection to instance name
 
 ```
 
-sirio7g@laptop$ ec2 -n hadoop-master
+sirio7g@laptop$ ec2 -n "hadoop-master"
 Connecting to hadoop-master
 ssh -i /home/sirio7g/my.pem ubuntu@ec2-51-227-4-45.eu-west-1.compute.amazonaws.com
 
