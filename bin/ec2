@@ -27,16 +27,16 @@ while getopts "u:k:c:n:ixh" opt; do
       nameOpt=$OPTARG
       ;;
     h)
-      echo "\nDisplay and connect easely to your EC2 instance(s)"
+      echo "Display and connect easely to your EC2 instance(s)"
       echo "Usage: $0 [-u user] [-x] [-c \"command\"] [eu|us|us-west-1|region]"
-      echo "\nArguments:"
-      echo "\t-i display instances' details and exit"
-      echo "\t-u user"
-      echo "\t-k PEM file"
-      echo "\t-x Export display"
-      echo "\t-c \"command (sent by ssh)\""
-      echo "\t-n \"name\""
-      echo "\nAll the arguments are optional, set the default properties in ~/.ec2-default.props"
+      echo "Arguments:"
+      echo -e "\t-i display instances' details and exit"
+      echo -e "\t-u user"
+      echo -e "\t-k PEM file"
+      echo -e "\t-x Export display"
+      echo -e "\t-c \"command (sent by ssh)\""
+      echo -e "\t-n \"name\""
+      echo "All the arguments are optional, set the default properties in ~/.ec2-default.props"
       exit 1
       ;;
     \?)
