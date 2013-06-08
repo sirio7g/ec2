@@ -124,3 +124,12 @@ ssh -i /home/sirio7g/my.pem ubuntu@ec2-51-227-4-45.eu-west-1.compute.amazonaws.c
 ubuntu@hadoop-master:~$
 
 ```
+
+Return instance address from instance name
+
+```
+
+sirio7g@laptop$ ec2 -d "hadoop-master"
+ec2-51-227-4-45.eu-west-1.compute.amazonaws.comubuntu@hadoop-master:~$
+
+```

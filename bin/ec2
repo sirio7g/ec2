@@ -6,7 +6,7 @@ infoOpt="N"
 xOpt=""
 
 # Extract options
-while getopts "u:k:c:n:ixh" opt; do
+while getopts "u:k:c:n:d:ixh" opt; do
   case $opt in
     u)
       userOpt=$OPTARG
@@ -26,6 +26,10 @@ while getopts "u:k:c:n:ixh" opt; do
     n) 
       nameOpt=$OPTARG
       ;;
+    d) 
+      nameOpt=$OPTARG
+      onlyPrint="1"
+      ;;
     h)
       echo "Display and connect easely to your EC2 instance(s)"
       echo "Usage: $0 [-u user] [-x] [-c \"command\"] [eu|us|us-west-1|region]"
@@ -36,6 +40,7 @@ while getopts "u:k:c:n:ixh" opt; do
       echo -e "\t-x Export display"
       echo -e "\t-c \"command (sent by ssh)\""
       echo -e "\t-n \"name\""
+      echo -e "\t-d \"name\""
       echo "All the arguments are optional, set the default properties in ~/.ec2-default.props"
       exit 1
       ;;
@@ -88,8 +93,11 @@ else
   user=$DEFAULT_USER
 fi
 
-# Print region info
-echo -e "\033[33mRegion: $region\033[0m"
+if [ "$onlyPrint" = "" ]
+  then
+  # Print region info
+  echo -e "\033[33mRegion: $region\033[0m"
+fi
 
 # Print info and quit
 if [ "$infoOpt" = "Y" ]
@@ -158,8 +166,14 @@ do
     fi
   done
 
-  # Run ssh
-  echo -e "\033[32mConnecting to $selectedname \033[0m"
-  echo -e "\033[33mssh -i $key $xOpt $user@$selectedhost\033[0m"
-  ssh -o StrictHostKeyChecking=no -i $key $xOpt $user@$selectedhost $commandOpt
+
+  if [ "$onlyPrint" = "" ]
+  then
+    # Run ssh
+    echo -e "\033[32mConnecting to $selectedname \033[0m"
+    echo -e "\033[33mssh -i $key $xOpt $user@$selectedhost\033[0m"
+    ssh -o StrictHostKeyChecking=no -i $key $xOpt $user@$selectedhost $commandOpt
+  else
+    echo -n "$selectedhost"
+  fi
 done
