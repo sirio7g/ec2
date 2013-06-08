@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 . $EC2_SCRIPT_HOME/conf/.ec2-default.props
 
 # Init variables
@@ -6,7 +6,7 @@ infoOpt="N"
 xOpt=""
 
 # Extract options
-while getopts "u:k:c:ixh" opt; do
+while getopts "u:k:c:n:d:ixh" opt; do
   case $opt in
     u)
       userOpt=$OPTARG
@@ -20,23 +20,32 @@ while getopts "u:k:c:ixh" opt; do
     i)
       infoOpt="Y"
       ;;
-    x)
+    x) 
       xOpt="-X"
       ;;
+    n) 
+      nameOpt=$OPTARG
+      ;;
+    d) 
+      nameOpt=$OPTARG
+      onlyPrint="1"
+      ;;
     h)
-      echo "\nDisplay and connect easely to your EC2 instance(s)"
+      echo "Display and connect easely to your EC2 instance(s)"
       echo "Usage: $0 [-u user] [-x] [-c \"command\"] [eu|us|us-west-1|region]"
-      echo "\nArguments:"
-      echo "\t-i display instances' details and exit"
-      echo "\t-u user"
-      echo "\t-k PEM file"
-      echo "\t-x Export display"
-      echo "\t-c \"command (sent by ssh)\""
-      echo "\nAll the arguments are optional, set the default properties in ~/.ec2-default.props"
+      echo "Arguments:"
+      echo -e "\t-i display instances' details and exit"
+      echo -e "\t-u user"
+      echo -e "\t-k PEM file"
+      echo -e "\t-x Export display"
+      echo -e "\t-c \"command (sent by ssh)\""
+      echo -e "\t-n \"name\""
+      echo -e "\t-d \"name\""
+      echo "All the arguments are optional, set the default properties in ~/.ec2-default.props"
       exit 1
       ;;
     \?)
-      echo "\033[1;32mInvalid option: -$OPTARG\033[0m" >&2
+      echo -e "\033[1;32mInvalid option: -$OPTARG\033[0m" >&2
       ;;
   esac
 done
@@ -84,8 +93,11 @@ else
   user=$DEFAULT_USER
 fi
 
-# Print region info
-echo "\033[33mRegion: $region\033[0m"
+if [ "$onlyPrint" = "" ]
+  then
+  # Print region info
+  echo -e "\033[33mRegion: $region\033[0m"
+fi
 
 # Print info and quit
 if [ "$infoOpt" = "Y" ]
@@ -99,19 +111,47 @@ hosts=`python $EC2_SCRIPT_HOME/bin/ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET
 name="`echo "$hosts" | awk 'BEGIN { FS = "\t" } ; { print $1 }'`"
 hostname="`echo "$hosts" | awk 'BEGIN { FS = "\t" } ; { print $2 }'`"
 
-index=0
-IFS=$'\n'
-for i in $name
-do
-  index=`expr $index + 1`
-  address=`echo "$hostname" | head -$index | tail -1`
-  echo "\033[33m$index. \033[32;1m$i\033[0m ($address)"
-done
-unset IFS
+if [ "$nameOpt" != "" ]
+then
+	index=0
 
-# Prompt for instance number(s)
-echo -n "Pick your option(s) (use space to specify more instances, i.e: 1 2 3 4): "
-read range
+	OIFS="${IFS}"
+	NIFS=$'\n'
+	
+	IFS="${NIFS}"
+
+	for i in `echo "$name"`
+	do
+		IFS="${OIFS}"
+		index=`expr $index + 1`
+		if [ "$nameOpt" = "$i" ]
+		then 
+			export range="$index"	
+		fi
+		IFS="${NIFS}"
+	done 
+	IFS="${OIFS}"
+
+	if [ "$range" = "" ]
+	then
+		echo -e "\033[31;2mHost $nameOpt not found\033[0m"
+	fi
+
+else
+
+	index=0
+	echo "$name" |while read i 
+	do
+		index=`expr $index + 1`
+		address=`echo "$hostname" | head -$index | tail -1`
+		echo -e "\033[33m$index. \033[32;1m$i\033[0m ($address)"
+	done
+
+	# Prompt for instance number(s)
+	echo -n "Pick your option(s) (use space to specify more instances, i.e: 1 2 3 4): "
+	read range
+fi
+
 
 for input in $range
 do
@@ -126,8 +166,14 @@ do
     fi
   done
 
-  # Run ssh
-  echo "\033[32mConnecting to $selectedname \033[0m"
-  echo "\033[33mssh -i $key $xOpt $user@$selectedhost\033[0m"
-  ssh -o StrictHostKeyChecking=no -i $key $xOpt $user@$selectedhost $commandOpt
+
+  if [ "$onlyPrint" = "" ]
+  then
+    # Run ssh
+    echo -e "\033[32mConnecting to $selectedname \033[0m"
+    echo -e "\033[33mssh -i $key $xOpt $user@$selectedhost\033[0m"
+    ssh -o StrictHostKeyChecking=no -i $key $xOpt $user@$selectedhost $commandOpt
+  else
+    echo -n "$selectedhost"
+  fi
 done
