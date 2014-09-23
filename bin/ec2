@@ -110,7 +110,7 @@ done
 unset IFS
 
 # Prompt for instance number(s)
-echo -n "Pick your option(s) (use space to specify more instances, i.e: 1 2 3 4): "
+printf "Pick your option(s) (use space to specify more instances, i.e: 1 2 3 4): "
 read range
 
 for input in $range
