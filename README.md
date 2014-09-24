@@ -20,7 +20,7 @@ git clone https://github.com/sirio7g/ec2.git
 ec2 script is built on top of boto library then, first of all, install them using pip:
 
 ```
-pip install boto
+sudo pip install boto
 
 #
 # If 'pip' is not installed on your machine, try with:
