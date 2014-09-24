@@ -1,7 +1,7 @@
 ec2
 ===
 
-ec2 is a simple shell script that helps you out to log into your EC2 instances just picking them from a list.
+ec2 is a simple shell script that helps you to log into your EC2 instances using the tag "Name".
 
 ![Screenshot](https://raw.github.com/sirio7g/ec2/master/docs/login.png "Screenshot")
 
@@ -21,9 +21,14 @@ ec2 script is built on top of boto library then, first of all, install them usin
 
 ```
 pip install boto
+
+#
+# If 'pip' is not installed on your machine, try with:
+# sudo easy_install pip
+#
 ```
 
-In most case if is enough but if you have the Mountain Lion version of OsX you might need to export the variable as following:
+In most case if is enough but if you are running Mountain Lion you might need to export the variable as follow:
 
 ```
 export PYTHONPATH=/usr/bin/python2.7
@@ -34,7 +39,7 @@ change the python version according to your own.
 
 ## Edit the configuration file
 
-Since ec2 script wants to be a very quick shortcut to jump into your instances, it uses a property file in order to load default settings as default username, default pem file, default region, etc., then edit the configuration file:
+Since ec2 script wants to be a very quick shortcut to jump into your instances, it uses a property file in order to load default settings i.e. username, default pem file, default region, etc. Therefore, you must edit configuration file:
 
 ```
 vi conf/.ec2-default.props
@@ -47,7 +52,7 @@ export EC2_SCRIPT_HOME=/path_of_ec2/
 export PATH=$PATH:$EC2_SCRIPT_HOME/bin
 ```
 
-you can do it persistent by adding the above line to your .bash_profile or .profile file in your home directory.
+persistent it by adding the above line to your ~/.bash_profile or ~/.profile.
 
 # Usage
 
