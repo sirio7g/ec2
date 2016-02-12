@@ -36,7 +36,6 @@ def print_instances(header):
             public_dns = instance.ip_address
           if service_name == None or service_name == '':
             service_name = ''
-          print instance.__dict__
           pair = [instance_name, instance.public_dns_name, instance.id, instance.private_ip_address, instance.ip_address, instance.instance_type, str(instance._placement), service_name]
           instance_pairs.append(pair)
   rows = sorted(instance_pairs, key=lambda p: p[0])
