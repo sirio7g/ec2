@@ -10,32 +10,44 @@ import boto.ec2
 _conn = None
 
 # get instance detailed information
-def getInstancesList():
-  instancesList = []
+def get_instances_list():
+  instances_list = []
   for reservation in _conn.get_all_instances():
-    instancesList.extend(reservation.instances)
-  return instancesList
+    instances_list.extend(reservation.instances)
+  return instances_list
+
+# print instance info as table
+def print_table(rows):
+  row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
+  for row in rows:
+    print row_format.format(*row)
 
 # print out instances list
-def printInstances():
+def print_instances(header):
   instance_pairs = []
-  for instance in getInstancesList():
+  for instance in get_instances_list():
       if instance.state == "running":
           instance_name = instance.tags.get("Name")
-          if instance.public_dns_name:
-              pair = (instance_name, instance.public_dns_name, instance.id, instance.private_ip_address, instance.ip_address, instance.instance_type)
-              instance_pairs.append(pair)
-          else:
-              if instance.ip_address:
-                  pair = (instance_name, instance.ip_address, instance.id, instance.private_ip_address, instance.ip_address, instance.instance_type)
-                  instance_pairs.append(pair)
-  for pair in sorted(instance_pairs, key=lambda p: p[0]):
-      print "%s\t%s\t%s\t%s\t%s\t%s" % pair
+          service_name = instance.tags.get("service")
+          public_dns = instance.public_dns_name
+          if instance_name == None or instance_name == '':
+            instance_name = instance.id
+          if public_dns == None or public_dns == '':
+            public_dns = instance.ip_address
+          if service_name == None or service_name == '':
+            service_name = ''
+          print instance.__dict__
+          pair = [instance_name, instance.public_dns_name, instance.id, instance.private_ip_address, instance.ip_address, instance.instance_type, str(instance._placement), service_name]
+          instance_pairs.append(pair)
+  rows = sorted(instance_pairs, key=lambda p: p[0])
+  if header:
+    rows.insert(0, ['Name','Hostname','Id','Private IPv4','Public IPv4','Type','Az', 'Service'])
+  print_table(rows)
 
 # parse given parameters
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv, "Lk:s:", ["aws-key", "aws-secret"])
+        opts, args = getopt.getopt(argv, "Lk:s:H", ["aws-key", "aws-secret", "with-header"])
     except getopt.GetoptError, err:
         print >>sys.stderr, err
         sys.exit(2)
@@ -43,12 +55,15 @@ def main(argv):
     aws_key = os.environ.get("AWS_ACCESS_KEY_ID")
     aws_secret = os.environ.get("AWS_SECRET_ACCESS_KEY")
     argc = len(args)
+    header = False
 
     for opt, arg in opts:
         if opt in("-k", "--aws-key"):
             aws_key = arg
         elif opt in("-s", "--aws-secret"):
             aws_secret = arg
+        elif opt in("-H", "--with-header"):
+            header = True
 
     if not aws_key or not aws_secret:
         if not aws_key:
@@ -69,8 +84,8 @@ def main(argv):
     if argc < 1:
        print >>stderr, "Error: region not specified"
     else:
-       _conn = boto.ec2.connect_to_region(args[0])
-       printInstances()
+       _conn = boto.ec2.connect_to_region(args[0], aws_access_key_id=aws_key, aws_secret_access_key=aws_secret)
+       print_instances(header)
        sys.exit()
 
 # run program

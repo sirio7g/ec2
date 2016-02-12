@@ -1,5 +1,5 @@
 #!/bin/sh
-. $EC2_SCRIPT_HOME/conf/.ec2-default.props
+source $EC2_SCRIPT_HOME/conf/.ec2-default.props
 
 # Init variables
 infoOpt="N"
@@ -90,14 +90,14 @@ echo "\033[33mRegion: $region\033[0m"
 # Print info and quit
 if [ "$infoOpt" = "Y" ]
 then
-  python $EC2_SCRIPT_HOME/bin/ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY $region
+  python $EC2_SCRIPT_HOME/bin/ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY --with-header $region
   exit 1
 fi
 
 # Get hostname
 hosts=`python $EC2_SCRIPT_HOME/bin/ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY $region`
-name="`echo "$hosts" | awk 'BEGIN { FS = "\t" } ; { print $1 }'`"
-hostname="`echo "$hosts" | awk 'BEGIN { FS = "\t" } ; { print $2 }'`"
+name="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $1 }'`"
+hostname="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $2 }'`"
 
 index=0
 IFS=$'\n'
