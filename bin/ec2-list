@@ -30,17 +30,20 @@ def print_instances(header):
           instance_name = instance.tags.get("Name")
           service_name = instance.tags.get("service")
           public_dns = instance.public_dns_name
+          spot_instance = 'Spot' 
+          if instance.spot_instance_request_id == None:
+             spot_instance = 'Normal'
           if instance_name == None or instance_name == '':
             instance_name = instance.id
           if public_dns == None or public_dns == '':
             public_dns = instance.ip_address
           if service_name == None or service_name == '':
             service_name = ''
-          pair = [instance_name, instance.public_dns_name, instance.id, instance.private_ip_address, instance.ip_address, instance.instance_type, str(instance._placement), service_name]
+          pair = [instance_name, instance.public_dns_name, instance.id, instance.private_ip_address, instance.ip_address, instance.instance_type, str(instance._placement), spot_instance, service_name]
           instance_pairs.append(pair)
   rows = sorted(instance_pairs, key=lambda p: p[0])
   if header:
-    rows.insert(0, ['Name','Hostname','Id','Private IPv4','Public IPv4','Type','Az', 'Service'])
+    rows.insert(0, ['Name','Hostname','Id','Private IPv4','Public IPv4','Type','Az','Price','Service'])
   print_table(rows)
 
 # parse given parameters
