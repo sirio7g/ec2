@@ -4,9 +4,10 @@ source $EC2_SCRIPT_HOME/conf/.ec2-default.props
 # Init variables
 infoOpt="N"
 xOpt=""
+usePrivateIp=false
 
 # Extract options
-while getopts "u:k:c:ixh" opt; do
+while getopts "u:k:c:ixhp" opt; do
   case $opt in
     u)
       userOpt=$OPTARG
@@ -20,6 +21,9 @@ while getopts "u:k:c:ixh" opt; do
     i)
       infoOpt="Y"
       ;;
+    p)
+      usePrivateIp=true
+      ;;
     x)
       xOpt="-X"
       ;;
@@ -28,6 +32,7 @@ while getopts "u:k:c:ixh" opt; do
       echo "Usage: $0 [-u user] [-x] [-c \"command\"] [eu|us|us-west-1|region]"
       echo "\nArguments:"
       echo "\t-i display instances' details and exit"
+      echo "\t-p use instance's private IPv4"
       echo "\t-u user"
       echo "\t-k PEM file"
       echo "\t-x Export display"
@@ -97,7 +102,12 @@ fi
 # Get hostname
 hosts=`python $EC2_SCRIPT_HOME/bin/ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY $region`
 name="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $1 }'`"
-hostname="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $2 }'`"
+if [ $usePrivateIp == true ]
+then 
+  hostname="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $4 }'`"
+else
+  hostname="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $2 }'`"
+fi
 
 index=0
 IFS=$'\n'
