@@ -23,7 +23,7 @@ def print_table(rows):
     print row_format.format(*row)
 
 # print out instances list
-def print_instances(header):
+def print_instances(header, short):
   instance_pairs = []
   for instance in get_instances_list():
       if instance.state == "running":
@@ -39,17 +39,25 @@ def print_instances(header):
             public_dns = instance.ip_address
           if service_name == None or service_name == '':
             service_name = ''
-          pair = [instance_name, instance.public_dns_name, instance.id, instance.private_ip_address, instance.ip_address, instance.instance_type, str(instance._placement), spot_instance, service_name]
+
+          if short:
+            pair = [instance_name, instance.private_ip_address, instance.ip_address, instance.instance_type, str(instance._placement)]
+          else:
+            pair = [instance_name, instance.public_dns_name, instance.id, instance.private_ip_address, instance.ip_address, instance.instance_type, str(instance._placement), spot_instance, service_name]         
           instance_pairs.append(pair)
+
   rows = sorted(instance_pairs, key=lambda p: p[0])
   if header:
-    rows.insert(0, ['Name','Hostname','Id','Private IPv4','Public IPv4','Type','Az','Price','Service'])
+    if (short):
+      rows.insert(0, ['Name','Private IPv4','Public IPv4','Type','Az'])
+    else:
+      rows.insert(0, ['Name','Hostname','Id','Private IPv4','Public IPv4','Type','Az','Price','Service'])
   print_table(rows)
 
 # parse given parameters
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv, "Lk:s:H", ["aws-key", "aws-secret", "with-header"])
+        opts, args = getopt.getopt(argv, "Lk:s:H", ["aws-key", "aws-secret", "with-header", "short"])
     except getopt.GetoptError, err:
         print >>sys.stderr, err
         sys.exit(2)
@@ -58,6 +66,7 @@ def main(argv):
     aws_secret = os.environ.get("AWS_SECRET_ACCESS_KEY")
     argc = len(args)
     header = False
+    short = False
 
     for opt, arg in opts:
         if opt in("-k", "--aws-key"):
@@ -66,6 +75,8 @@ def main(argv):
             aws_secret = arg
         elif opt in("-H", "--with-header"):
             header = True
+        elif opt in("--short"):
+            short = True
 
     if not aws_key or not aws_secret:
         if not aws_key:
@@ -87,7 +98,7 @@ def main(argv):
        print >>stderr, "Error: region not specified"
     else:
        _conn = boto.ec2.connect_to_region(args[0], aws_access_key_id=aws_key, aws_secret_access_key=aws_secret)
-       print_instances(header)
+       print_instances(header, short)
        sys.exit()
 
 # run program

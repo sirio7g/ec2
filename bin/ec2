@@ -7,7 +7,7 @@ xOpt=""
 usePrivateIp=false
 
 # Extract options
-while getopts "u:k:c:ixhp" opt; do
+while getopts "u:k:c:ixhps" opt; do
   case $opt in
     u)
       userOpt=$OPTARG
@@ -24,6 +24,9 @@ while getopts "u:k:c:ixhp" opt; do
     p)
       usePrivateIp=true
       ;;
+    s)
+      SHORT=" --short "
+      ;;
     x)
       xOpt="-X"
       ;;
@@ -36,6 +39,7 @@ while getopts "u:k:c:ixhp" opt; do
       echo "\t-u user"
       echo "\t-k PEM file"
       echo "\t-x Export display"
+      echo "\t-s Short view"
       echo "\t-c \"command (sent by ssh)\""
       echo "\nAll the arguments are optional, set the default properties in ~/.ec2-default.props"
       exit 1
@@ -95,7 +99,7 @@ echo "\033[33mRegion: $region\033[0m"
 # Print info and quit
 if [ "$infoOpt" = "Y" ]
 then
-  python $EC2_SCRIPT_HOME/bin/ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY --with-header $region
+  python ${EC2_SCRIPT_HOME}/bin/ec2-list -k ${AWS_ACCESS_KEY_ID} -s ${AWS_SECRET_ACCESS_KEY} ${SHORT} --with-header $region
   exit 1
 fi
 
