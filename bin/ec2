@@ -25,6 +25,7 @@ while getopts "u:k:c:ixhps" opt; do
       usePrivateIp=true
       ;;
     s)
+      infoOpt="Y"
       SHORT=" --short "
       ;;
     x)
