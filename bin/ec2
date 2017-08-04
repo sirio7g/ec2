@@ -32,21 +32,21 @@ while getopts "u:k:c:ixhps" opt; do
       xOpt="-X"
       ;;
     h)
-      echo "\nDisplay and connect easely to your EC2 instance(s)"
+      echo -e "\nDisplay and connect easely to your EC2 instance(s)"
       echo "Usage: $0 [-u user] [-x] [-c \"command\"] [eu|us|us-west-1|region]"
-      echo "\nArguments:"
-      echo "\t-i display instances' details and exit"
-      echo "\t-p use instance's private IPv4"
-      echo "\t-u user"
-      echo "\t-k PEM file"
-      echo "\t-x Export display"
-      echo "\t-s Short view"
-      echo "\t-c \"command (sent by ssh)\""
-      echo "\nAll the arguments are optional, set the default properties in ~/.ec2-default.props"
+      echo -e "\nArguments:"
+      echo -e "\t-i display instances' details and exit"
+      echo -e "\t-p use instance's private IPv4"
+      echo -e "\t-u user"
+      echo -e "\t-k PEM file"
+      echo -e "\t-x Export display"
+      echo -e "\t-s Short view"
+      echo -e "\t-c \"command (sent by ssh)\""
+      echo -e "\nAll the arguments are optional, set the default properties in ~/.ec2-default.props"
       exit 1
       ;;
     \?)
-      echo "\033[1;32mInvalid option: -$OPTARG\033[0m" >&2
+      echo -e "\033[1;32mInvalid option: -$OPTARG\033[0m" >&2
       ;;
   esac
 done
@@ -95,7 +95,7 @@ else
 fi
 
 # Print region info
-echo "\033[33mRegion: $region\033[0m"
+echo -e "\033[33mRegion: $region\033[0m"
 
 # Print info and quit
 if [ "$infoOpt" = "Y" ]
@@ -120,7 +120,7 @@ for i in $name
 do
   index=`expr $index + 1`
   address=`echo "$hostname" | head -$index | tail -1`
-  echo "\033[33m$index. \033[32;1m$i\033[0m ($address)"
+  echo -e "\033[33m$index. \033[32;1m$i\033[0m ($address)"
 done
 unset IFS
 
@@ -142,7 +142,7 @@ do
   done
 
   # Run ssh
-  echo "\033[32mConnecting to $selectedname \033[0m"
-  echo "\033[33mssh -i $key $xOpt $user@$selectedhost\033[0m"
+  echo -e "\033[32mConnecting to $selectedname \033[0m"
+  echo -e "\033[33mssh -i $key $xOpt $user@$selectedhost\033[0m"
   ssh -o StrictHostKeyChecking=no -i $key $xOpt $user@$selectedhost $commandOpt
 done
