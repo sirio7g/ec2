@@ -52,7 +52,7 @@ while getopts "u:k:c:ixhps" opt; do
 done
 shift $(($OPTIND - 1))
 
-# Set default variables
+#Set default variables
 if [ "$1" = "" ]
 then
   region=$DEFAULT_REGION
@@ -94,18 +94,32 @@ else
   user=$DEFAULT_USER
 fi
 
+# Region alias
+case "$region" in
+    tokyo)
+		region="ap-northeast-1";;
+	mumbai)
+		region="ap-south-1";;
+	us-east)
+		region="us-east-1";;
+	dublin)
+		region="eu-west-1";;
+	singapore)
+		region="ap-southeast-1";;
+esac
+
 # Print region info
 echo "\033[33mRegion: $region\033[0m"
 
 # Print info and quit
 if [ "$infoOpt" = "Y" ]
 then
-  python ${EC2_SCRIPT_HOME}/bin/ec2-list -k ${AWS_ACCESS_KEY_ID} -s ${AWS_SECRET_ACCESS_KEY} ${SHORT} --with-header $region
+  ${EC2_SCRIPT_HOME}/bin/ec2-list -k ${AWS_ACCESS_KEY_ID} -s ${AWS_SECRET_ACCESS_KEY} ${SHORT} --with-header $region
   exit 1
 fi
 
 # Get hostname
-hosts=`python $EC2_SCRIPT_HOME/bin/ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY $region`
+hosts=`$EC2_SCRIPT_HOME/bin/ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY $region`
 name="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $1 }'`"
 if [ $usePrivateIp == true ]
 then 

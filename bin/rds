@@ -1,0 +1,107 @@
+#!/usr/bin/python
+
+import os
+import sys
+import getopt
+from sys import stderr
+import boto3
+
+def print_bool(bool_value):
+  return 'Yes' if bool_value == True else 'No'
+
+def print_sg(sg_list):
+  sg_found = []
+  for sg in sg_list:
+    sg_found.append(sg['DBSubnetGroupName'])
+  return ','.join(sg_found)
+
+# get instance detailed information
+def get_rds_instances(client):
+  instances_list = []
+  paginator = client.get_paginator('describe_db_instances')
+  page_iterator = paginator.paginate()
+  for page in page_iterator:
+    instances_list = instances_list + page['DBInstances']
+  
+  return instances_list
+
+# print instance info as table
+def print_table(rows):
+  row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
+  for row in rows:
+    print row_format.format(*row)
+
+def print_instances(instances_list, short=False):
+  rows = []
+  
+  for instance in instances_list:
+    if short is False:
+      rows.append([
+        instance['DBInstanceIdentifier'], 
+        instance['DBSubnetGroup']['DBSubnetGroupName'],
+        instance['DBInstanceClass'], 
+        '%s GB' % instance['AllocatedStorage'],
+        '%s %s' % (instance['Engine'], instance['EngineVersion']), 
+        instance['DBInstanceStatus'],
+        instance['AvailabilityZone'],
+        print_bool(instance['MultiAZ']),
+        instance['DBSubnetGroup']['VpcId'],
+        print_bool(instance['AutoMinorVersionUpgrade']),
+        'Public' if instance['PubliclyAccessible'] == True else 'Private',      
+        '%s:%s' % (instance['Endpoint']['Address'], instance['Endpoint']['Port'])
+        ])
+    else:
+      rows.append([
+        instance['DBInstanceIdentifier'], 
+        instance['DBSubnetGroup']['DBSubnetGroupName'],
+        instance['DBInstanceClass'], 
+        '%s %s' % (instance['Engine'], instance['EngineVersion']), 
+        instance['DBInstanceStatus'],
+        print_bool(instance['MultiAZ']),
+        instance['DBSubnetGroup']['VpcId'],
+        'Public' if instance['PubliclyAccessible'] == True else 'Private',      
+        ])
+
+  rows = sorted(rows, key=lambda p: p[0])
+
+  if short is False:
+    rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Storage', 'Engine', 'Status', 'AZ', 'MultiAZ', 'VpcId', 'MinorUpdate', 'Scope', 'Endpoint'])
+  else:
+    rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Engine', 'Status', 'MultiAZ', 'VpcId', 'Scope'])
+
+  return rows
+
+# parse given parameters
+def main(argv):
+    region = 'us-east-1'
+    short = False
+    
+    try:
+      opts, args = getopt.getopt(argv, "r:s")
+
+      for opt, arg in opts:
+          if opt in('-r'):
+            if arg == 'tokyo':
+              region = 'ap-northeast-1'
+            elif arg == 'mumbai':
+              region = 'ap-douth-1'
+            elif arg == 'us-east':
+              region = 'us-east-1'
+            elif arg == 'dublin':
+              region = 'eu-west-1'
+            elif arg == 'singapore':
+              region = 'ap-southeast-1'
+          if opt in ('-s'):
+            short = True
+    except getopt.GetoptError, err:
+      print >>sys.stderr, err
+      sys.exit(2)
+
+    print("Region: " + region)
+    client = boto3.client('rds', region_name=region)
+    print_table(print_instances(get_rds_instances(client), short=short))
+
+
+# run program
+if __name__ == "__main__":
+    main(sys.argv[1:])

@@ -30,20 +30,23 @@ def print_instances(header, short):
           instance_name = instance.tags.get("Name")
           service_name = instance.tags.get("service")
           public_dns = instance.public_dns_name
+          public_ip = instance.ip_address
           spot_instance = 'Spot' 
+          if public_ip == None or public_ip == '':
+            public_ip = 'n/a'
           if instance.spot_instance_request_id == None:
              spot_instance = 'Normal'
           if instance_name == None or instance_name == '':
             instance_name = instance.id
           if public_dns == None or public_dns == '':
-            public_dns = instance.ip_address
+            public_dns = public_ip
           if service_name == None or service_name == '':
             service_name = ''
 
           if short:
-            pair = [instance_name, instance.private_ip_address, instance.ip_address, instance.instance_type, str(instance._placement)]
+            pair = [instance_name, instance.private_ip_address, public_ip, instance.instance_type, str(instance._placement)]
           else:
-            pair = [instance_name, instance.public_dns_name, instance.id, instance.private_ip_address, instance.ip_address, instance.instance_type, str(instance._placement), spot_instance, service_name]         
+            pair = [instance_name, public_dns, instance.id, instance.private_ip_address, public_ip, instance.instance_type, str(instance._placement), spot_instance, service_name]         
           instance_pairs.append(pair)
 
   rows = sorted(instance_pairs, key=lambda p: p[0])
