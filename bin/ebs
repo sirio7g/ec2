@@ -1,0 +1,105 @@
+#!/usr/bin/python
+
+import os
+import sys
+import getopt
+from sys import stderr
+import boto3
+
+def print_bool(bool_value):
+  return 'Yes' if bool_value == True else 'No'
+
+
+# get instance detailed information
+def get_volumes(client):
+  volumes = []
+  paginator = client.get_paginator('describe_volumes')
+  page_iterator = paginator.paginate()
+  for page in page_iterator:
+    volumes = volumes + page['Volumes']
+
+  return volumes
+
+
+def get_attached_instance(attachments):
+  if attachments is not None:
+    for attachment in attachments:
+      return attachment['InstanceId'], attachment['Device'], print_bool(attachment['DeleteOnTermination'])
+
+# print instance info as table
+def print_table(rows):
+  total = 0
+  num_of_devices = len(rows) - 1
+  row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
+  for row in rows:
+    if row[1] is not 'Size':
+      total = total + int(row[1])
+    print row_format.format(*row)
+
+  if num_of_devices > 0:
+    print("\nFound %s volumes for a total of %s GBs" % (num_of_devices, total))
+
+
+def print_volumes(volumes_list, short=False):
+  rows = []
+
+  for instance in volumes_list:
+    if short is False:
+      if instance.get('State', None) == 'in-use':
+        instance_id, device, dot = get_attached_instance(instance.get('Attachments'))
+      else:
+        instance_id, device, dot = '', '', ''
+      rows.append([
+        instance.get('VolumeId'), 
+        str(instance.get('Size')), 
+        str(instance.get('Iops')),
+        instance.get('VolumeType'), 
+        instance.get('AvailabilityZone'), 
+        instance.get('State'),
+        instance_id,
+        device,
+        dot
+        ])
+
+  rows = sorted(rows, key=lambda p: p[0])
+
+  if short is False:
+    rows.insert(0, ['VolumeId', 'Size', 'IOPS', 'Type', 'AZ', 'State', 'InstanceId', 'Device', 'Delete on Termination'])
+
+  return rows
+
+
+# parse given parameters
+def main(argv):
+    region = 'us-east-1'
+    short = False
+    
+    try:
+      opts, args = getopt.getopt(argv, "r:s")
+
+      for opt, arg in opts:
+          if opt in('-r'):
+            if arg == 'tokyo':
+              region = 'ap-northeast-1'
+            elif arg == 'mumbai':
+              region = 'ap-south-1'
+            elif arg == 'us-east':
+              region = 'us-east-1'
+            elif arg == 'dublin':
+              region = 'eu-west-1'
+            elif arg == 'singapore':
+              region = 'ap-southeast-1'
+          if opt in ('-s'):
+            short = True
+    except getopt.GetoptError, err:
+      print >>sys.stderr, err
+      sys.exit(2)
+
+    print("Region: " + region)
+    client = boto3.client('ec2', region_name=region)
+    print_table(print_volumes(get_volumes(client), short=short))
+
+
+# run program
+if __name__ == "__main__":
+    main(sys.argv[1:])
