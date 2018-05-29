@@ -48,7 +48,8 @@ def print_instances(instances_list, short=False):
         instance['DBSubnetGroup']['VpcId'],
         print_bool(instance['AutoMinorVersionUpgrade']),
         'Public' if instance['PubliclyAccessible'] == True else 'Private',      
-        '%s:%s' % (instance['Endpoint']['Address'], instance['Endpoint']['Port'])
+        '%s:%s' % (instance['Endpoint']['Address'], instance['Endpoint']['Port']),
+        str(instance['BackupRetentionPeriod'])
         ])
     else:
       rows.append([
@@ -65,7 +66,7 @@ def print_instances(instances_list, short=False):
   rows = sorted(rows, key=lambda p: p[0])
 
   if short is False:
-    rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Storage', 'Engine', 'Status', 'AZ', 'MultiAZ', 'VpcId', 'MinorUpdate', 'Scope', 'Endpoint'])
+    rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Storage', 'Engine', 'Status', 'AZ', 'MultiAZ', 'VpcId', 'MinorUpdate', 'Scope', 'Endpoint', 'Backup'])
   else:
     rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Engine', 'Status', 'MultiAZ', 'VpcId', 'Scope'])
 
