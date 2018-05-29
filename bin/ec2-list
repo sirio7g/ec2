@@ -46,7 +46,7 @@ def print_instances(header, short):
           if short:
             pair = [instance_name, instance.private_ip_address, public_ip, instance.instance_type, str(instance._placement)]
           else:
-            pair = [instance_name, public_dns, instance.id, instance.private_ip_address, public_ip, instance.instance_type, str(instance._placement), spot_instance, service_name]         
+            pair = [instance_name, public_dns, instance.id, instance.private_ip_address, public_ip, instance.instance_type, str(instance._placement), instance.image_id, spot_instance, service_name]         
           instance_pairs.append(pair)
 
   rows = sorted(instance_pairs, key=lambda p: p[0])
@@ -54,7 +54,7 @@ def print_instances(header, short):
     if (short):
       rows.insert(0, ['Name','Private IPv4','Public IPv4','Type','Az'])
     else:
-      rows.insert(0, ['Name','Hostname','Id','Private IPv4','Public IPv4','Type','Az','Price','Service'])
+      rows.insert(0, ['Name','Hostname','Id','Private IPv4','Public IPv4','Type','Az','AMI','Price','Service'])
   print_table(rows)
 
 # parse given parameters
