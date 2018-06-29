@@ -1,0 +1,265 @@
+#!/usr/bin/python
+
+import os
+import sys
+import getopt
+from sys import stderr
+import boto3
+import time
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[32m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+def withcolor(text):
+  if text is None:
+    return text
+
+  if text in ('Remove', 'True', 'FAILED', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED', 'UPDATE_ROLLBACK_COMPLETE'):
+    return bcolors.FAIL + text + bcolors.ENDC
+  elif text in ('Conditional', 'DELETE_SKIPPED'):
+    return bcolors.WARNING + text + bcolors.ENDC
+  elif text in ('CREATE_COMPLETE', 'DELETE_COMPLETE', 'UPDATE_COMPLETE'):
+    return bcolors.OKGREEN + text + bcolors.ENDC
+  else:
+    return text
+
+def prompt_confirmation(message):
+  answer = None
+  while answer not in ("yes", "no"):
+    answer = raw_input(message)
+    if answer == "yes":
+      return True
+    elif answer == "no":
+      return False
+    else:
+      print("Please enter 'yes' or 'no'.")  
+
+def wait_for_status(client, change_set_name, stack_name, status_type = 'Status', polling_interval=3):
+  proceed = True
+  response = None
+  iteration = 0
+  while True:
+    try:
+      response = client.describe_change_set(
+          ChangeSetName = change_set_name,
+          StackName= stack_name
+      )
+    except client.exceptions.ChangeSetNotFoundException as e:
+      if iteration >= 2:
+        break
+      else:
+        iteration += 1
+        continue
+    except ClientError as e:
+      print "Unexpected error: %s" % e
+      sys.exit(1)
+
+    status = response.get(status_type)
+    if status in ('EXECUTE_IN_PROGRESS', 'CREATE_PENDING', 'CREATE_IN_PROGRESS'):
+      print("Current status: %s. Waiting ..." % response.get(status_type))
+      time.sleep(polling_interval)
+    elif status in ('FAILED', 'EXECUTE_FAILED', 'OBSOLETE'):
+      proceed = False
+      print("Status: %s. Reason: %s" % (withcolor(response.get(status_type)), response.get('StatusReason')))
+      break     
+    else:
+      print("Status: %s. Reason: %s" % (withcolor(response.get(status_type)), response.get('StatusReason')))
+      break
+  return proceed
+
+def wait_for_stack_status(client, stack_name, client_token, polling_interval=3):
+  response = None
+  last_event_ts = None
+  event_nr = 1
+  status = None
+  resource_type = None
+  print('Events:')
+  while not (status in ('UPDATE_ROLLBACK_COMPLETE', 'UPDATE_COMPLETE', 'CREATE_COMPLETE') and resource_type == "AWS::CloudFormation::Stack"):
+    paginator = client.get_paginator('describe_stack_events')
+    page_iterator = paginator.paginate(StackName = stack_name)
+    for page in page_iterator:
+      for event in page['StackEvents']:
+        if event.get('ClientRequestToken') == client_token:
+          if last_event_ts is None or last_event_ts < event['Timestamp']:
+            last_event_ts = event['Timestamp']
+            status = event.get('ResourceStatus')
+            resource_type = event.get('ResourceType')
+            print("\t#%s\n\tResourceStatus: %s\n\tResourceType: %s\n\tLogicalResourceId: %s\n\tPhysicalResourceId: %s\n\tReason: %s\n" % 
+              (event_nr, withcolor(status), resource_type, event.get('LogicalResourceId'), event.get('PhysicalResourceId'), event.get('ResourceStatusReason')))
+            event_nr += 1
+    time.sleep(polling_interval)
+
+def build_params(params):
+  params_list = []
+  for param in params:
+    params_list.append({"ParameterKey" : param.get('ParameterKey'), "UsePreviousValue": True})
+
+  return params_list
+
+def create_change_set(client, stack_name, template_file, params, capabilities):
+  change_set_name = "%s-%s" % (stack_name, int(time.time()))
+  change_set = client.create_change_set(
+    StackName = stack_name,
+    TemplateBody = get_file_as_string(template_file),
+    ChangeSetName = change_set_name,
+    ChangeSetType = 'UPDATE',
+    Parameters = build_params(params),
+    Capabilities = [] if capabilities is None else capabilities
+  )
+  print("Created change set: %s" % change_set_name)
+  return change_set_name
+
+def update_change_set(client, change_set_name, stack_name):
+  client_token = "Event-%s-%s" % (int(time.time()), change_set_name)
+  print("Updating change set '%s' for stack '%s' ..." % (change_set_name, stack_name))
+  response = client.execute_change_set(
+      ChangeSetName = change_set_name,
+      StackName = stack_name,
+      ClientRequestToken = client_token
+  )
+
+  return client_token
+
+def delete_change_set(client, change_set_name, stack_name):
+  print("Cleaning up change set '%s'" % change_set_name)
+
+  response = client.delete_change_set(
+      ChangeSetName = change_set_name,
+      StackName = stack_name
+  )
+
+def print_change_set(client, change_set_name, stack_name):
+  response = client.describe_change_set(
+      ChangeSetName = change_set_name,
+      StackName= stack_name
+  )  
+
+  print("\nChanges:")
+  for change in response['Changes']:
+    resource = change['ResourceChange']
+    print("\tAction: %s\n\tReplacement: %s\n\tResourceType: %s\n\tLogicalResourceId: %s\n\tPhysicalResourceId: %s\n\t"
+      % (withcolor(resource.get('Action')), withcolor(resource.get('Replacement')), resource.get('ResourceType'), resource.get('LogicalResourceId'), resource.get('PhysicalResourceId')))
+
+def print_status(status, reason):
+  if reason == None:
+    return status
+  else:
+    return "%s (%s)" % (status, reason)
+
+def get_file_as_string(template_file):
+  data = None
+  with open(template_file, 'r') as myfile:
+    data = myfile.read()  
+  return data
+
+def print_template(params, capabilities):
+  print('\nParameters:\n')
+  for param in params:
+    print("\t%s: %s\n\t%s\n" % (param.get('ParameterKey'), param.get('DefaultValue') if param.get('DefaultValue') is not None else '', param.get('Description')))
+
+  if capabilities is not None:
+    print("\nRequired capabilities:\n")
+    for capability in capabilities:
+      print('\t%s\n' % (capability))
+
+def validate_template(client, template_file):
+  template = client.validate_template(TemplateBody = get_file_as_string(template_file))
+  return template.get('Parameters'), template.get('Capabilities') 
+
+def get_stacks(client):
+  stacks = []
+  paginator = client.get_paginator('describe_stacks')
+  page_iterator = paginator.paginate()
+  for page in page_iterator:
+      stacks = stacks + page['Stacks']
+
+  return stacks
+
+def print_table(rows):
+  row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
+  for row in rows:
+    print row_format.format(*row)
+
+def print_stacks(rset, short=False):
+  rows = []
+  
+  for record in rset:
+    rows.append([
+      record['StackName'], 
+      record['Description'] if record.get('Description') else 'N/A',
+      print_status(record.get('StackStatus'), record.get('StackStatusReason')),
+      record['CreationTime'].strftime("%d/%m/%Y %H:%M:%S"),
+      record['LastUpdatedTime'].strftime("%d/%m/%Y %H:%M:%S") if record.get('LastUpdatedTime') else 'N/A'
+      ])
+  rows = sorted(rows, key=lambda p: p[0])
+  rows.insert(0, ['Name', 'Description', 'Status', 'Created', 'Updated'])
+  return rows
+
+def update(client, stack_name, template_file):
+  params, capabilities = validate_template(client, template_file)
+  change_set_name = create_change_set(client, stack_name, template_file, params, capabilities)
+  if wait_for_status(client, change_set_name, stack_name):
+    print_change_set(client, change_set_name, stack_name)
+    if prompt_confirmation("Do you want to update the stack (yes/no): "):
+      client_token = update_change_set(client, change_set_name, stack_name)
+      wait_for_stack_status(client, stack_name, client_token)
+      return
+  delete_change_set(client, change_set_name, stack_name)
+
+
+# parse given parameters
+def main(argv):
+    region = 'us-east-1'
+    stack_name = None
+    template_file = None
+    command = None
+    
+    try:
+      opts, args = getopt.getopt(argv, "r:n:v:u:")
+
+      for opt, arg in opts:
+          if opt in('-r'):
+            if arg == 'tokyo':
+              region = 'ap-northeast-1'
+            elif arg == 'mumbai':
+              region = 'ap-douth-1'
+            elif arg == 'us-east':
+              region = 'us-east-1'
+            elif arg == 'dublin':
+              region = 'eu-west-1'
+            elif arg == 'singapore':
+              region = 'ap-southeast-1'
+          if opt in('-n'):
+            stack_name = arg
+          if opt in('-v'):
+            command = 'validate_template'
+            template_file = arg
+          if opt in('-u'):
+            command = 'update_template'
+            template_file = arg
+    except getopt.GetoptError, err:
+      print >>sys.stderr, err
+      sys.exit(2)
+
+    print("Region: " + region)
+    client = boto3.client('cloudformation', region_name=region)
+
+    if command == 'validate_template':
+      params, capabilities = validate_template(client, template_file)
+      print_template(params, capabilities)
+    elif command == 'update_template':
+      update(client, stack_name, template_file)
+    else:
+      print_table(print_stacks(get_stacks(client)))
+    print("Goodbye")
+
+# run program
+if __name__ == "__main__":
+    main(sys.argv[1:])
