@@ -6,6 +6,10 @@ import getopt
 from sys import stderr
 import boto
 import boto.ec2
+import dateutil.parser
+import calendar
+import time
+import datetime
 
 _conn = None
 
@@ -21,6 +25,14 @@ def print_table(rows):
   row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
   for row in rows:
     print row_format.format(*row)
+
+def get_uptime(launch_time_str):
+  launch_time = dateutil.parser.parse(launch_time_str)          
+  elapsed_time = int(time.time() - calendar.timegm(launch_time.timetuple()))
+  if elapsed_time > 604800: #a week
+    return str(datetime.timedelta(seconds=elapsed_time)).split(',')[0]
+  else:
+    return str(datetime.timedelta(seconds=elapsed_time))
 
 # print out instances list
 def print_instances(header, short):
@@ -46,7 +58,7 @@ def print_instances(header, short):
           if short:
             pair = [instance_name, instance.private_ip_address, public_ip, instance.instance_type, str(instance._placement)]
           else:
-            pair = [instance_name, public_dns, instance.id, instance.private_ip_address, public_ip, instance.instance_type, str(instance._placement), instance.image_id, spot_instance, service_name]         
+            pair = [instance_name, public_dns, instance.id, instance.private_ip_address, public_ip, instance.instance_type, str(instance._placement), instance.image_id, spot_instance, get_uptime(instance.launch_time), service_name]         
           instance_pairs.append(pair)
 
   rows = sorted(instance_pairs, key=lambda p: p[0])
@@ -54,7 +66,7 @@ def print_instances(header, short):
     if (short):
       rows.insert(0, ['Name','Private IPv4','Public IPv4','Type','Az'])
     else:
-      rows.insert(0, ['Name','Hostname','Id','Private IPv4','Public IPv4','Type','Az','AMI','Price','Service'])
+      rows.insert(0, ['Name','Hostname','Id','Private IPv4','Public IPv4','Type','Az','AMI','Price','Uptime', 'Service'])
   print_table(rows)
 
 # parse given parameters

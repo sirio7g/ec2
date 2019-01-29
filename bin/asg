@@ -52,13 +52,14 @@ def print_instances(instances_list, short=False):
         str(instance.get('MaxSize')),         
         str(instance.get('DefaultCooldown')), 
         instance.get('HealthCheckType'),
-        ','.join(instance.get('AvailabilityZones'))
+        ','.join(instance.get('AvailabilityZones')),
+        instance.get('ServiceLinkedRoleARN', '')
         ])
 
   rows = sorted(rows, key=lambda p: p[0])
 
   if short is False:
-    rows.insert(0, ['Name', 'Current', 'Min', 'Desired', 'Max', 'Cooldown', 'Healthcheck', 'AZs'])
+    rows.insert(0, ['Name', 'Current', 'Min', 'Desired', 'Max', 'Cooldown', 'Healthcheck', 'AZs', 'Role'])
 
   return rows
 

@@ -6,6 +6,8 @@ import getopt
 from sys import stderr
 import boto3
 import time
+import pytz
+from datetime import datetime
 
 class bcolors:
     HEADER = '\033[95m'
@@ -17,15 +19,18 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-def withcolor(text):
+def withcolor(text, from_text=None):
   if text is None:
     return text
 
-  if text in ('Remove', 'True', 'FAILED', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED', 'UPDATE_ROLLBACK_COMPLETE'):
+  if from_text is None:
+    from_text = text
+
+  if from_text in ('Remove', 'True', 'FAILED', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED', 'UPDATE_ROLLBACK_COMPLETE'):
     return bcolors.FAIL + text + bcolors.ENDC
-  elif text in ('Conditional', 'DELETE_SKIPPED'):
+  elif from_text in ('Conditional', 'DELETE_SKIPPED'):
     return bcolors.WARNING + text + bcolors.ENDC
-  elif text in ('CREATE_COMPLETE', 'DELETE_COMPLETE', 'UPDATE_COMPLETE'):
+  elif from_text in ('CREATE_COMPLETE', 'DELETE_COMPLETE', 'UPDATE_COMPLETE'):
     return bcolors.OKGREEN + text + bcolors.ENDC
   else:
     return text
@@ -40,6 +45,9 @@ def prompt_confirmation(message):
       return False
     else:
       print("Please enter 'yes' or 'no'.")  
+
+def generate_tags(template_version, template_file):
+  return [{'template_version': template_version}, {'template_file': template_file}]
 
 def wait_for_status(client, change_set_name, stack_name, status_type = 'Status', polling_interval=3):
   proceed = True
@@ -76,7 +84,7 @@ def wait_for_status(client, change_set_name, stack_name, status_type = 'Status',
 
 def wait_for_stack_status(client, stack_name, client_token, polling_interval=3):
   response = None
-  last_event_ts = None
+  last_event_ts = datetime(1970, 1, 1, 0, 0, 0, tzinfo=pytz.utc)
   event_nr = 1
   status = None
   resource_type = None
@@ -84,22 +92,52 @@ def wait_for_stack_status(client, stack_name, client_token, polling_interval=3):
   while not (status in ('UPDATE_ROLLBACK_COMPLETE', 'UPDATE_COMPLETE', 'CREATE_COMPLETE') and resource_type == "AWS::CloudFormation::Stack"):
     paginator = client.get_paginator('describe_stack_events')
     page_iterator = paginator.paginate(StackName = stack_name)
+    last_event_ts_session = None
+    events = []
     for page in page_iterator:
       for event in page['StackEvents']:
-        if event.get('ClientRequestToken') == client_token:
-          if last_event_ts is None or last_event_ts < event['Timestamp']:
-            last_event_ts = event['Timestamp']
+        if event.get('ClientRequestToken') == client_token:          
+          if last_event_ts_session is None:
+            last_event_ts_session = event['Timestamp']
             status = event.get('ResourceStatus')
             resource_type = event.get('ResourceType')
-            print("\t#%s\n\tResourceStatus: %s\n\tResourceType: %s\n\tLogicalResourceId: %s\n\tPhysicalResourceId: %s\n\tReason: %s\n" % 
-              (event_nr, withcolor(status), resource_type, event.get('LogicalResourceId'), event.get('PhysicalResourceId'), event.get('ResourceStatusReason')))
-            event_nr += 1
+
+          if event['Timestamp'] > last_event_ts:
+            events.insert(0, "\tTimestamp: %s\n\tResourceStatus: %s\n\tResourceType: %s\n\tLogicalResourceId: %s\n\tPhysicalResourceId: %s\n\tReason: %s\n" % 
+              (event.get('Timestamp').strftime("%H:%M:%S"), 
+                withcolor(event.get('ResourceStatus')), 
+                event.get('ResourceType'), 
+                event.get('LogicalResourceId'), 
+                event.get('PhysicalResourceId'), 
+                withcolor(event.get('ResourceStatusReason'), event.get('ResourceStatus'))
+                )
+              )
+
+    last_event_ts = last_event_ts_session
+    #flush array
+    for string in events:
+      print("\t#%d" % (event_nr))
+      print(string)
+      event_nr += 1
     time.sleep(polling_interval)
 
-def build_params(params):
+
+def build_params(existing_params, new_params):
   params_list = []
-  for param in params:
-    params_list.append({"ParameterKey" : param.get('ParameterKey'), "UsePreviousValue": True})
+  for param in new_params:
+    found = False
+    param_key = param.get('ParameterKey')
+    for param_to_find in existing_params:
+      if param_to_find.get('ParameterKey') == param_key:
+        params_list.append({"ParameterKey" : param.get('ParameterKey'), "UsePreviousValue": True})
+        found = True
+        break
+    if not found:
+      default_value = param.get('DefaultValue')
+      if default_value is not None:
+        params_list.append({"ParameterKey" : param_key, "ParameterValue": default_value})
+      else:
+        params_list.append({"ParameterKey" : param_key, "ParameterValue": ""})
 
   return params_list
 
@@ -110,7 +148,7 @@ def create_change_set(client, stack_name, template_file, params, capabilities):
     TemplateBody = get_file_as_string(template_file),
     ChangeSetName = change_set_name,
     ChangeSetType = 'UPDATE',
-    Parameters = build_params(params),
+    Parameters = build_params(get_stacks_params_by_name(client, stack_name), params),
     Capabilities = [] if capabilities is None else capabilities
   )
   print("Created change set: %s" % change_set_name)
@@ -124,7 +162,6 @@ def update_change_set(client, change_set_name, stack_name):
       StackName = stack_name,
       ClientRequestToken = client_token
   )
-
   return client_token
 
 def delete_change_set(client, change_set_name, stack_name):
@@ -182,6 +219,11 @@ def get_stacks(client):
 
   return stacks
 
+def get_stacks_params_by_name(client, stack_name):
+  response = client.describe_stacks(StackName = stack_name)
+  for stack in response['Stacks']:
+    return stack['Parameters']
+
 def print_table(rows):
   row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
   for row in rows:
@@ -222,7 +264,7 @@ def main(argv):
     command = None
     
     try:
-      opts, args = getopt.getopt(argv, "r:n:v:u:")
+      opts, args = getopt.getopt(argv, "r:n:v:u:h")
 
       for opt, arg in opts:
           if opt in('-r'):
@@ -244,6 +286,9 @@ def main(argv):
           if opt in('-u'):
             command = 'update_template'
             template_file = arg
+          if opt in('-h'):
+            print("CloudFormation on command-line:\ncf [-r region] [-v template_file] [-n stack_name -u template_file]")
+            sys.exit(0)            
     except getopt.GetoptError, err:
       print >>sys.stderr, err
       sys.exit(2)

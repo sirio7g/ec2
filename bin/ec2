@@ -106,6 +106,8 @@ case "$region" in
 		region="eu-west-1";;
 	singapore)
 		region="ap-southeast-1";;
+	canada)
+		region="ca-central-1";;
 esac
 
 # Print region info
