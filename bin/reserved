@@ -47,18 +47,22 @@ def get_reserved_instances_by_type(client):
 def print_summary(in_use, reserved):
   rows = []
   wasted_count = 0
+  reservation_count = 0
+  inuse_count = 0
   for instance_type, count in in_use.items():
     reserved_count = reserved[instance_type]
+    reservation_count += reserved_count
+    inuse_count += count
     if (reserved_count - count) > 0:
       wasted = reserved_count - count
-      wasted_count += wasted
+      wasted_count += wasted      
     else:
       wasted = 'None'
     rows.append([instance_type, str(count), str(reserved_count), str(wasted)])  
 
   rows.insert(0, ['Instance type', 'In use', 'Reserved', 'Unused'])
   print_table(rows)
-  return wasted_count
+  return (inuse_count, reservation_count, wasted_count)
 
 
 # print instance info as table
@@ -72,7 +76,9 @@ def print_table(rows):
 def main(argv):
     region = None
     short = False
-    wasted = 0
+    wasted_count = 0
+    reserved_count = 0
+    inuse_count = 0
     
     try:
       opts, args = getopt.getopt(argv, "r:s")
@@ -101,16 +107,24 @@ def main(argv):
       for region_name in ['us-east-1', 'ap-northeast-1', 'eu-west-1', 'ap-southeast-1', 'ca-central-1']:
         print("Region: " + region_name)
         client = boto3.client('ec2', region_name=region_name)    
-        wasted += print_summary(get_ec2_instances_by_type(client), get_reserved_instances_by_type(client))
+        summary = print_summary(get_ec2_instances_by_type(client), get_reserved_instances_by_type(client))
+        inuse_count += summary[0]        
+        reserved_count += summary[1]
+        wasted_count += summary[2]
         print("")
     else:
         print("Region: " + region)
         client = boto3.client('ec2', region_name=region)    
-        wasted += print_summary(get_ec2_instances_by_type(client), get_reserved_instances_by_type(client))
+        summary = print_summary(get_ec2_instances_by_type(client), get_reserved_instances_by_type(client))
+        inuse_count += summary[0]        
+        reserved_count += summary[1]
+        wasted_count += summary[2]
+        print("")        
 
-    if wasted > 0:
-      sys.exit(wasted)
+    if wasted_count > 0:
+      sys.exit(wasted_count)
 
+    print("Total: %d in use; %d reserved; %d unused." % (inuse_count, reserved_count, wasted_count))
 # run program
 if __name__ == "__main__":
     main(sys.argv[1:])

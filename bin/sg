@@ -1,0 +1,99 @@
+#!/usr/bin/python
+
+import os
+import sys
+import getopt
+from sys import stderr
+import boto3
+import dateutil.parser
+import calendar
+import time
+import datetime
+
+def print_bool(bool_value):
+  return 'Yes' if bool_value == True else 'No'
+
+def get_tag(tags, tag_name, default):
+  for tag in tags:
+    if tag['Key'] == tag_name:
+      return tag['Value']
+  return default
+
+def get_sgs(client):
+  sg_list = []
+  sg_paginator = client.get_paginator('describe_security_groups')
+  sg_page_iterator = sg_paginator.paginate()  
+  for page in sg_page_iterator:
+    for sg in page['SecurityGroups']:
+      sg_list = sg_list + sg
+  
+  return sg_list
+
+def print_table(rows):
+  row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
+  for row in rows:
+    print row_format.format(*row)
+
+def print_sgs(sg_list, short=False, header=False):
+  rows = []
+  
+  for sg in sg_list:
+    if short:
+      rows.append([
+        instance.get('GroupId'),
+        instance.get('VpcId'),
+        instance.get('GroupName')
+      ])
+    else:
+      rows.append([
+        instance.get('GroupId'),
+        instance.get('VpcId'),
+        instance.get('GroupName')
+      ])
+          
+  rows = sorted(rows, key=lambda p: p[0])
+
+  if short is True:
+    rows.insert(0, ['Id','VpcId','Name'])
+  else:
+    rows.insert(0, ['Id','VpcId','Name'])
+
+  return rows
+
+# parse given parameters
+def main(argv):
+    region = 'us-east-1'
+    short = False
+    header = False
+    
+    try:
+      opts, args = getopt.getopt(argv, "Lr:H", ["region", "with-header", "short"])
+
+      for opt, arg in opts:
+          if opt in('-r', '--region'):
+            if arg == 'tokyo':
+              region = 'ap-northeast-1'
+            elif arg == 'mumbai':
+              region = 'ap-douth-1'
+            elif arg == 'us-east':
+              region = 'us-east-1'
+            elif arg == 'dublin':
+              region = 'eu-west-1'
+            elif arg == 'singapore':
+              region = 'ap-southeast-1'
+            elif arg == 'canada':
+              region = 'ca-central-1'
+          if opt in ('-s', '--short'):
+            short = True
+          if opt in ('-H', '--with-header'):
+            header = True
+    except getopt.GetoptError, err:
+      print >>sys.stderr, err
+      sys.exit(2)
+
+    client = boto3.client('ec2', region_name=region)
+    print_table(print_sgs(get_sgs(client), short=short, header=header))
+
+# run program
+if __name__ == "__main__":
+    main(sys.argv[1:])

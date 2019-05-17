@@ -11,6 +11,14 @@ def print_bool(bool_value):
   return 'Yes' if bool_value == True else 'No'
 
 
+def get_supended_process(processes):
+  processes_list = []
+  if processes is not None:
+    for process in processes:
+      processes_list.append(process['ProcessName'])
+  return ', '.join(processes_list)
+
+
 def get_current_instances(instances):
   unhealthy = 0
   if instances is not None:
@@ -53,13 +61,13 @@ def print_instances(instances_list, short=False):
         str(instance.get('DefaultCooldown')), 
         instance.get('HealthCheckType'),
         ','.join(instance.get('AvailabilityZones')),
-        instance.get('ServiceLinkedRoleARN', '')
+        get_supended_process(instance.get('SuspendedProcesses', None))
         ])
 
   rows = sorted(rows, key=lambda p: p[0])
 
   if short is False:
-    rows.insert(0, ['Name', 'Current', 'Min', 'Desired', 'Max', 'Cooldown', 'Healthcheck', 'AZs', 'Role'])
+    rows.insert(0, ['Name', 'Current', 'Min', 'Desired', 'Max', 'Cooldown', 'Healthcheck', 'AZs', 'Sospended'])
 
   return rows
 
@@ -84,6 +92,8 @@ def main(argv):
               region = 'eu-west-1'
             elif arg == 'singapore':
               region = 'ap-southeast-1'
+            elif arg == 'canada':
+              region = 'ca-central-1'
           if opt in ('-s'):
             short = True
     except getopt.GetoptError, err:

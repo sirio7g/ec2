@@ -21,10 +21,19 @@ def get_volumes(client):
   return volumes
 
 
+def get_tag(tags, tag_name, default):
+  if tags is not None:
+    for tag in tags:
+      if tag['Key'] == tag_name:
+        return tag['Value']
+  return default
+
+
 def get_attached_instance(attachments):
   if attachments is not None:
     for attachment in attachments:
       return attachment['InstanceId'], attachment['Device'], print_bool(attachment['DeleteOnTermination'])
+
 
 # print instance info as table
 def print_table(rows):
@@ -58,13 +67,14 @@ def print_volumes(volumes_list, short=False):
         instance.get('State'),
         instance_id,
         device,
-        dot
+        dot,
+        get_tag(instance.get('Tags'), 'Name', '')
         ])
 
   rows = sorted(rows, key=lambda p: p[0])
 
   if short is False:
-    rows.insert(0, ['VolumeId', 'Size', 'IOPS', 'Type', 'AZ', 'State', 'InstanceId', 'Device', 'Delete on Termination'])
+    rows.insert(0, ['VolumeId', 'Size', 'IOPS', 'Type', 'AZ', 'State', 'InstanceId', 'Device', 'Delete on Termination', 'Service'])
 
   return rows
 

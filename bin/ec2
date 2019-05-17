@@ -5,18 +5,27 @@ source $EC2_SCRIPT_HOME/conf/.ec2-default.props
 infoOpt="N"
 xOpt=""
 usePrivateIp=false
+key=${DEFAULT_PEM}
+region=${DEFAULT_REGION}
+user=${DEFAULT_USER}
 
 # Extract options
-while getopts "u:k:c:ixhps" opt; do
+while getopts "u:k:c:r:t:ixhps" opt; do
   case $opt in
     u)
-      userOpt=$OPTARG
+      user=$OPTARG
       ;;
     k)
       keyOpt=$OPTARG
       ;;
     c)
       commandOpt=$OPTARG
+      ;;
+    r)
+      region=$OPTARG
+      ;;
+    t)
+      tags=" -t ${OPTARG}"
       ;;
     i)
       infoOpt="Y"
@@ -33,14 +42,16 @@ while getopts "u:k:c:ixhps" opt; do
       ;;
     h)
       echo "\nDisplay and connect easely to your EC2 instance(s)"
-      echo "Usage: $0 [-u user] [-x] [-c \"command\"] [eu|us|us-west-1|region]"
+      echo "Usage: $0 [-u user] [-x] [-c \"command\"] [-r eu|us|us-west-1|region]"
       echo "\nArguments:"
+      echo "\t-r region"
       echo "\t-i display instances' details and exit"
       echo "\t-p use instance's private IPv4"
       echo "\t-u user"
       echo "\t-k PEM file"
       echo "\t-x Export display"
       echo "\t-s Short view"
+      echo "\t-t Tags, comma separated (no spaces)"      
       echo "\t-c \"command (sent by ssh)\""
       echo "\nAll the arguments are optional, set the default properties in ~/.ec2-default.props"
       exit 1
@@ -52,51 +63,9 @@ while getopts "u:k:c:ixhps" opt; do
 done
 shift $(($OPTIND - 1))
 
-#Set default variables
-if [ "$1" = "" ]
-then
-  region=$DEFAULT_REGION
-else
-  region=$1
-fi
-
-if [ "$keyOpt" != "" ]
-then
-    key=$keyOpt
-else
-    key=$DEFAULT_PEM
-fi
-
-if [ "$1" = "eu" ]
-then
-  if [ "$keyOpt" != "" ]
-  then
-    key=$keyOpt
-  else
-    key=$DEFAULT_EU_PEM
-  fi
-  region=$DEFAULT_EU
-elif [ "$1" = "us" ]
-then
-  if [ "$keyOpt" != "" ]
-  then
-    key=$keyOpt
-  else
-    key=$DEFAULT_US_PEM
-  fi
-  region=$DEFAULT_US
-fi
-
-if [ "$userOpt" != "" ]
-then
-  user=$userOpt
-else
-  user=$DEFAULT_USER
-fi
-
 # Region alias
 case "$region" in
-    tokyo)
+  tokyo)
 		region="ap-northeast-1";;
 	mumbai)
 		region="ap-south-1";;
@@ -116,12 +85,12 @@ echo "\033[33mRegion: $region\033[0m"
 # Print info and quit
 if [ "$infoOpt" = "Y" ]
 then
-  ${EC2_SCRIPT_HOME}/bin/ec2-list -k ${AWS_ACCESS_KEY_ID} -s ${AWS_SECRET_ACCESS_KEY} ${SHORT} --with-header $region
-  exit 1
+  ${EC2_SCRIPT_HOME}/bin/ec2-list ${SHORT} --with-header --region $region $tags
+  exit 0
 fi
 
 # Get hostname
-hosts=`$EC2_SCRIPT_HOME/bin/ec2-list -k $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY $region`
+hosts=`$EC2_SCRIPT_HOME/bin/ec2-list --region $region $tags`
 name="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $1 }'`"
 if [ $usePrivateIp == true ]
 then 
