@@ -9,19 +9,31 @@ from botocore.exceptions import ClientError
 
 
 def get_sgs(client, group_ref=None):
-  try:
-    if group_ref is not None:
-      if group_ref.startswith('sg-'):
-        sgs = client.describe_security_groups(DryRun=False, GroupIds=[group_ref])
+  sgs = []
+  sg_ids = []
+  sg_names = []
+
+  if group_ref is not None:      
+    for ref in group_ref:        
+      if ref.startswith('sg-'):
+        sg_ids.append(ref)
       else:
-        sgs = client.describe_security_groups(DryRun=False, GroupNames=[group_ref])
-    else:
-      sgs = client.describe_security_groups(DryRun=False)
+        sg_names.append(ref)
+
+  try:
+    if len(sg_ids) > 0:
+      sgs += client.describe_security_groups(DryRun=False, GroupIds=sg_ids)['SecurityGroups']
+    
+    if len(sg_names) > 0:
+      sgs += client.describe_security_groups(DryRun=False, Filters=[{'Name': 'group-name', 'Values': sg_names}])['SecurityGroups']
+
+    if group_ref is None:
+      sgs = client.describe_security_groups(DryRun=False)['SecurityGroups']
   except ClientError as e:
       if e.response['Error']['Code'] == 'InvalidGroup.NotFound':
-        return []
+        return sgs
   
-  return sgs['SecurityGroups']
+  return sgs
 
 
 def print_table(rows):
@@ -73,17 +85,19 @@ def print_range(fromPort, toPort):
 
 def print_details(sg):
   in_rows = []
+  out_rows = []
   print("GroupId: %s (%s)\nDescription: %s\n" % (sg['GroupId'], sg['GroupName'], sg['Description']))
   
   print("Inbound rules")
   for rule in sg.get('IpPermissions'):
-    in_rows.append(["All" if rule['IpProtocol'] == -1 else rule['IpProtocol'], print_range(rule.get('FromPort'), rule.get('ToPort')), print_cidr(rule)])
+    in_rows.append(["All" if rule['IpProtocol'] == "-1" else rule['IpProtocol'], print_range(rule.get('FromPort'), rule.get('ToPort')), print_cidr(rule)])
   print_table(in_rows)
 
   print("\nOutbound rules")
   for rule in sg.get('IpPermissionsEgress'):
-    in_rows.append(["All" if rule['IpProtocol'] == "-1" else rule['IpProtocol'], print_range(rule.get('FromPort'), rule.get('ToPort')), print_cidr(rule)])
-  print_table(in_rows)
+    out_rows.append(["All" if rule['IpProtocol'] == "-1" else rule['IpProtocol'], print_range(rule.get('FromPort'), rule.get('ToPort')), print_cidr(rule)])
+  print_table(out_rows)
+  print('')
 
 
 # parse given parameters
@@ -121,9 +135,10 @@ def main(argv):
 
     print("Region: %s" % (region))
     if sg_id:
-      sg = get_sgs(client, sg_id)
-      if len(sg) > 0:
-        print_details(sg[0])
+      sgs = get_sgs(client, sg_id.split(','))
+      if len(sgs) > 0:
+        for sg in sgs:
+          print_details(sg)
     else:
       print_table(print_sgs(get_sgs(client), header=header))
 
