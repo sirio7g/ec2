@@ -5,69 +5,95 @@ import sys
 import getopt
 from sys import stderr
 import boto3
-import dateutil.parser
-import calendar
-import time
-import datetime
+from botocore.exceptions import ClientError
 
-def print_bool(bool_value):
-  return 'Yes' if bool_value == True else 'No'
 
-def get_tag(tags, tag_name, default):
-  for tag in tags:
-    if tag['Key'] == tag_name:
-      return tag['Value']
-  return default
-
-def get_sgs(client):
-  sg_list = []
-  sg_paginator = client.get_paginator('describe_security_groups')
-  sg_page_iterator = sg_paginator.paginate()  
-  for page in sg_page_iterator:
-    for sg in page['SecurityGroups']:
-      sg_list = sg_list + sg
+def get_sgs(client, group_ref=None):
+  try:
+    if group_ref is not None:
+      if group_ref.startswith('sg-'):
+        sgs = client.describe_security_groups(DryRun=False, GroupIds=[group_ref])
+      else:
+        sgs = client.describe_security_groups(DryRun=False, GroupNames=[group_ref])
+    else:
+      sgs = client.describe_security_groups(DryRun=False)
+  except ClientError as e:
+      if e.response['Error']['Code'] == 'InvalidGroup.NotFound':
+        return []
   
-  return sg_list
+  return sgs['SecurityGroups']
+
 
 def print_table(rows):
   row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
   for row in rows:
     print row_format.format(*row)
 
-def print_sgs(sg_list, short=False, header=False):
+
+def print_sgs(sg_list, header=False):
   rows = []
   
   for sg in sg_list:
-    if short:
-      rows.append([
-        instance.get('GroupId'),
-        instance.get('VpcId'),
-        instance.get('GroupName')
-      ])
-    else:
-      rows.append([
-        instance.get('GroupId'),
-        instance.get('VpcId'),
-        instance.get('GroupName')
-      ])
+    rows.append([
+      sg.get('GroupId', ''),
+      sg.get('VpcId', ''),
+      sg.get('GroupName', '')
+    ])
           
   rows = sorted(rows, key=lambda p: p[0])
-
-  if short is True:
-    rows.insert(0, ['Id','VpcId','Name'])
-  else:
-    rows.insert(0, ['Id','VpcId','Name'])
+  rows.insert(0, ['Id','VpcId','Name'])
 
   return rows
+
+
+def print_cidr(rule):
+  cidrs = []
+  if rule.get('IpRanges'):
+    cidrs += [cidr['CidrIp'] for cidr in rule.get('IpRanges')]
+  if rule.get('Ipv6Ranges'):
+    cidrs += [cidr['CidrIpv6'] for cidr in rule.get('Ipv6Ranges')]
+  if rule.get('PrefixListIds'):
+    cidrs += [cidr['PrefixListId'] for cidr in rule.get('PrefixListIds')]
+  if rule.get('UserIdGroupPairs'):
+    cidrs += [cidr['GroupId'] for cidr in rule.get('UserIdGroupPairs')]
+
+  return ", ".join(cidrs)
+
+
+def print_range(fromPort, toPort):
+  if fromPort == None and toPort == None:
+    return "All"
+  elif fromPort == -1 and toPort == -1:
+    return "All"
+  elif fromPort == toPort:
+    return str(fromPort)
+  else:
+    return "%d-%d" % (fromPort, toPort)
+
+
+def print_details(sg):
+  in_rows = []
+  print("GroupId: %s (%s)\nDescription: %s\n" % (sg['GroupId'], sg['GroupName'], sg['Description']))
+  
+  print("Inbound rules")
+  for rule in sg.get('IpPermissions'):
+    in_rows.append(["All" if rule['IpProtocol'] == -1 else rule['IpProtocol'], print_range(rule.get('FromPort'), rule.get('ToPort')), print_cidr(rule)])
+  print_table(in_rows)
+
+  print("\nOutbound rules")
+  for rule in sg.get('IpPermissionsEgress'):
+    in_rows.append(["All" if rule['IpProtocol'] == "-1" else rule['IpProtocol'], print_range(rule.get('FromPort'), rule.get('ToPort')), print_cidr(rule)])
+  print_table(in_rows)
+
 
 # parse given parameters
 def main(argv):
     region = 'us-east-1'
-    short = False
+    sg_id = None
     header = False
     
     try:
-      opts, args = getopt.getopt(argv, "Lr:H", ["region", "with-header", "short"])
+      opts, args = getopt.getopt(argv, "r:Hs:", ["region", "with-header", "security-group"])
 
       for opt, arg in opts:
           if opt in('-r', '--region'):
@@ -83,8 +109,8 @@ def main(argv):
               region = 'ap-southeast-1'
             elif arg == 'canada':
               region = 'ca-central-1'
-          if opt in ('-s', '--short'):
-            short = True
+          if opt in ('-s', '--security-group'):
+            sg_id = arg
           if opt in ('-H', '--with-header'):
             header = True
     except getopt.GetoptError, err:
@@ -92,7 +118,14 @@ def main(argv):
       sys.exit(2)
 
     client = boto3.client('ec2', region_name=region)
-    print_table(print_sgs(get_sgs(client), short=short, header=header))
+
+    print("Region: %s" % (region))
+    if sg_id:
+      sg = get_sgs(client, sg_id)
+      if len(sg) > 0:
+        print_details(sg[0])
+    else:
+      print_table(print_sgs(get_sgs(client), header=header))
 
 # run program
 if __name__ == "__main__":
