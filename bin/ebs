@@ -68,13 +68,14 @@ def print_volumes(volumes_list, short=False):
         instance_id,
         device,
         dot,
+        'Yes' if instance.get('Encrypted') else 'No',
         get_tag(instance.get('Tags'), 'Name', '')
         ])
 
   rows = sorted(rows, key=lambda p: p[0])
 
   if short is False:
-    rows.insert(0, ['VolumeId', 'Size', 'IOPS', 'Type', 'AZ', 'State', 'InstanceId', 'Device', 'Delete on Termination', 'Service'])
+    rows.insert(0, ['VolumeId', 'Size', 'IOPS', 'Type', 'AZ', 'State', 'InstanceId', 'Device', 'Delete on Termination', 'Encrypted', 'Service'])
 
   return rows
 
@@ -91,14 +92,14 @@ def main(argv):
           if opt in('-r'):
             if arg == 'tokyo':
               region = 'ap-northeast-1'
-            elif arg == 'mumbai':
-              region = 'ap-south-1'
             elif arg == 'us-east':
               region = 'us-east-1'
             elif arg == 'dublin':
               region = 'eu-west-1'
             elif arg == 'singapore':
               region = 'ap-southeast-1'
+            elif arg == 'canada':
+              region = 'ca-central-1'
           if opt in ('-s'):
             short = True
     except getopt.GetoptError, err:

@@ -20,18 +20,14 @@ def get_sgs(client, group_ref=None):
       else:
         sg_names.append(ref)
 
-  try:
-    if len(sg_ids) > 0:
-      sgs += client.describe_security_groups(DryRun=False, GroupIds=sg_ids)['SecurityGroups']
+  if len(sg_ids) > 0:
+    sgs += client.describe_security_groups(DryRun=False, GroupIds=sg_ids)['SecurityGroups']
     
-    if len(sg_names) > 0:
-      sgs += client.describe_security_groups(DryRun=False, Filters=[{'Name': 'group-name', 'Values': sg_names}])['SecurityGroups']
+  if len(sg_names) > 0:
+    sgs += client.describe_security_groups(DryRun=False, Filters=[{'Name': 'group-name', 'Values': sg_names}])['SecurityGroups']
 
-    if group_ref is None:
-      sgs = client.describe_security_groups(DryRun=False)['SecurityGroups']
-  except ClientError as e:
-      if e.response['Error']['Code'] == 'InvalidGroup.NotFound':
-        return sgs
+  if group_ref is None:
+    sgs = client.describe_security_groups(DryRun=False)['SecurityGroups']
   
   return sgs
 
@@ -89,11 +85,13 @@ def print_details(sg):
   print("GroupId: %s (%s)\nDescription: %s\n" % (sg['GroupId'], sg['GroupName'], sg['Description']))
   
   print("Inbound rules")
+  in_rows.append(['Proto', 'Ports', 'Source'])
   for rule in sg.get('IpPermissions'):
     in_rows.append(["All" if rule['IpProtocol'] == "-1" else rule['IpProtocol'], print_range(rule.get('FromPort'), rule.get('ToPort')), print_cidr(rule)])
   print_table(in_rows)
 
   print("\nOutbound rules")
+  out_rows.append(['Proto', 'Ports', 'Destination'])  
   for rule in sg.get('IpPermissionsEgress'):
     out_rows.append(["All" if rule['IpProtocol'] == "-1" else rule['IpProtocol'], print_range(rule.get('FromPort'), rule.get('ToPort')), print_cidr(rule)])
   print_table(out_rows)

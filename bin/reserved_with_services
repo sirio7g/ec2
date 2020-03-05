@@ -36,6 +36,30 @@ nf_power = {
   'm5d.metal':192
 }
 
+break_even = {
+  'i3': 8.21,
+  'c5': 7.60,
+  'c5d': 7.54,
+  'm5': 7.60,
+  'm5d': 7.62,
+  'r4': 7.55,
+  't3': 7.50,
+  't2': 7.41,
+  'c4': 8.05
+}
+
+nu_cost = {
+  'i3': 28.55,
+  'c5': 15.555,
+  'c5d': 17.568125,
+  'm5': 17.57,
+  'm5d': 20.68,
+  'r4': 24.34,
+  't3': 15.22,
+  't2': 16.98,
+  'c4': 20.13
+}
+
 def get_nf(i_class, i_size):
   if i_size == 'metal':
     return nf_power['%s.%s' % (i_class, i_size)]
@@ -50,10 +74,10 @@ def print_values(in_use, reserved):
     return '%d/%d' % (in_use, reserved)
 
 
-def get_ec2_instances_by_type(client):
+def get_ec2_instances_by_type(client, tag_name, tag_value):
   in_use = {}
   paginator = client.get_paginator('describe_instances')
-  page_iterator = paginator.paginate() 
+  page_iterator = paginator.paginate(Filters=[{'Name':'tag:%s' % tag_name,'Values':['%s' % tag_value]}]) 
   for page in page_iterator:
     for instances in page.get('Reservations'):
       for instance in instances.get('Instances'):        
@@ -76,56 +100,31 @@ def add_reserved_nf_by_class(client, in_use):
         i_class, i_size = instance.get('InstanceType').split('.')
         if i_class in in_use:
           in_use[i_class]['NF_reserved'] = in_use[i_class].get('NF_reserved', 0) + instance.get('InstanceCount') * get_nf(i_class, i_size)          
+          in_use[i_class]['r_%s' % i_size] = in_use[i_class].get('r_%s' % i_size, 0) + instance.get('InstanceCount')
         else:
-          in_use[i_class] = {'NF_reserved': instance.get('InstanceCount') * get_nf(i_class, i_size)}
-        in_use[i_class]['r_%s' % i_size] = in_use[i_class].get('r_%s' % i_size, 0) + instance.get('InstanceCount')
+          pass                  
 
   return in_use
 
 
-def print_summary(instances):
+def get_summary(instances, tag_value, region_name):
   rows = []
-  instance_count = 0
-  inuse_count = 0
-  reserved_count = 0
-
-  rows.insert(0, ['Class (used/rsvd)', 'n   ', 'm   ', 'S   ', 'M   ', 'L   ', 'XL  ', '2XL ', '3XL ', '4XL ', '6XL ', '8XL ', '9XL ', '10XL', '12XL', '16XL', '18XL', '24XL', '32XL', 'metal', 'NU in use', 'NU reserved', 'NU balance'])
   for name, sizes in instances.items():    
     rows.append([
+      region_name,
       name,
-      print_values(sizes.get('nano', 0), sizes.get('r_nano', 0)),
-      print_values(sizes.get('micro', 0), sizes.get('r_micro', 0)),
-      print_values(sizes.get('small', 0), sizes.get('r_small', 0)),
-      print_values(sizes.get('medium', 0), sizes.get('r_medium', 0)),
-      print_values(sizes.get('large', 0), sizes.get('r_large', 0)),
-      print_values(sizes.get('xlarge', 0), sizes.get('r_xlarge', 0)),
-      print_values(sizes.get('2xlarge', 0), sizes.get('r_2xlarge', 0)),
-      print_values(sizes.get('3xlarge', 0), sizes.get('r_3xlarge', 0)),
-      print_values(sizes.get('4xlarge', 0), sizes.get('r_4xlarge', 0)),
-      print_values(sizes.get('6xlarge', 0), sizes.get('r_6xlarge', 0)),
-      print_values(sizes.get('8xlarge', 0), sizes.get('r_8xlarge', 0)),
-      print_values(sizes.get('9xlarge', 0), sizes.get('r_9xlarge', 0)),
-      print_values(sizes.get('10xlarge', 0), sizes.get('r_10xlarge', 0)),
-      print_values(sizes.get('12xlarge', 0), sizes.get('r_12xlarge', 0)),
-      print_values(sizes.get('16xlarge', 0), sizes.get('r_16xlarge', 0)),
-      print_values(sizes.get('18xlarge', 0), sizes.get('r_18xlarge', 0)),
-      print_values(sizes.get('24xlarge', 0), sizes.get('r_24xlarge', 0)),
-      print_values(sizes.get('32xlarge', 0), sizes.get('r_32xlarge', 0)),
-      print_values(sizes.get('metal', 0), sizes.get('r_metal', 0)),      
+      tag_value,
       str(sizes.get('NF_used', 0)),
-      str(sizes.get('NF_reserved', 0)),
-      "{0:+}".format(sizes.get('NF_used', 0) - sizes.get('NF_reserved', 0))
+      "%0.2f" % (sizes.get('NF_used', 0) * nu_cost[name]),
+      "%0.2f" % (sizes.get('NF_used', 0) * (nu_cost[name]*((break_even[name])/12))),
+      str(break_even[name])
     ])
-    instance_count += sizes.get('count', 0)
-    inuse_count += sizes.get('NF_used', 0)
-    reserved_count += sizes.get('NF_reserved', 0)
-
-  print_table(rows)
-  return (instance_count, inuse_count, reserved_count)
+  return rows
 
 
 # print instance info as table
 def print_table(rows):
+  rows.insert(0, ['Region', 'Class', 'Service', 'NU in use', 'Monthly cost', 'Reserved cost', 'Break even'])
   row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
   for row in rows:
     print row_format.format(*row)
@@ -138,9 +137,12 @@ def main(argv):
     instance_count = 0
     inuse_count = 0
     reserved_count = 0
+    tag_name = None
+    tag_values = None
+
     
     try:
-      opts, args = getopt.getopt(argv, "r:s")
+      opts, args = getopt.getopt(argv, "r:t:")
 
       for opt, arg in opts:
           if opt in('-r'):
@@ -156,38 +158,34 @@ def main(argv):
               region = 'ap-southeast-1'
             elif arg == 'canada':
               region = 'ca-central-1'
-          if opt in ('-s'):
-            short = True
+          if opt in ('-t'):
+            tag_name, tag_values = arg.split(':')
+            tag_values = tag_values.split(',')
     except getopt.GetoptError, err:
       print >>sys.stderr, err
       sys.exit(2)
 
+    if tag_name is None and tag_values is None:
+      print('Tag name or values missing')
+      print('e.g. -t service:api,ml,machinery')
+      sys.exit(2)        
+
     if region == None:
       for region_name in ['us-east-1', 'ap-northeast-1', 'eu-west-1', 'ap-southeast-1', 'ca-central-1']:
         print("Region: " + region_name)
-        client = boto3.client('ec2', region_name=region_name)    
-        summary = print_summary(add_reserved_nf_by_class(client, get_ec2_instances_by_type(client)))
-        instance_count += summary[0]        
-        inuse_count += summary[1]
-        reserved_count += summary[2]
-        print("")
+        client = boto3.client('ec2', region_name=region_name)
+        rows = []
+        for tag_value in tag_values:
+          rows += get_summary(get_ec2_instances_by_type(client, tag_name, tag_value), tag_value, region_name)
+        print_table(rows)
     else:
         print("Region: " + region)
         client = boto3.client('ec2', region_name=region)    
-        summary = print_summary(add_reserved_nf_by_class(client, get_ec2_instances_by_type(client)))
-        instance_count += summary[0]        
-        inuse_count += summary[1]
-        reserved_count += summary[2]
-        print("")        
+        rows = []
+        for tag_value in tag_values:
+          rows += get_summary(get_ec2_instances_by_type(client, tag_name, tag_value), tag_value, region)
+        print_table(rows)
 
-    print("Total: %d instances; %d NU in use; %d NU reserved." % (instance_count, inuse_count, reserved_count))
-
-    print('\nNormalization factors per instance class and size')
-    for k, v in sorted(nf_power.items(), key=lambda kv: kv[1]):
-      print('%s: %s' % (k, v))
-
-    # if wasted_count > 0:
-    #   sys.exit(wasted_count)
 
 # run program
 if __name__ == "__main__":

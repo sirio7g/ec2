@@ -278,6 +278,8 @@ def main(argv):
               region = 'eu-west-1'
             elif arg == 'singapore':
               region = 'ap-southeast-1'
+            elif arg == 'canada':
+              region = 'ca-central-1'
           if opt in('-n'):
             stack_name = arg
           if opt in('-v'):

@@ -6,14 +6,24 @@ import getopt
 from sys import stderr
 import boto3
 
+
 def print_bool(bool_value):
   return 'Yes' if bool_value == True else 'No'
+
 
 def print_sg(sg_list):
   sg_found = []
   for sg in sg_list:
     sg_found.append(sg['DBSubnetGroupName'])
   return ','.join(sg_found)
+
+
+def print_vpc_sgs(vpc_sgs):
+  sg_found = []
+  for sg in vpc_sgs:
+    sg_found.append(sg['VpcSecurityGroupId'])
+  return ','.join(sg_found)	
+
 
 # get instance detailed information
 def get_rds_instances(client):
@@ -25,11 +35,13 @@ def get_rds_instances(client):
   
   return instances_list
 
+
 # print instance info as table
 def print_table(rows):
   row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
   for row in rows:
     print row_format.format(*row)
+
 
 def print_instances(instances_list, short=False):
   rows = []
@@ -43,9 +55,10 @@ def print_instances(instances_list, short=False):
         '%s GB' % instance['AllocatedStorage'],
         '%s %s' % (instance['Engine'], instance['EngineVersion']), 
         instance['DBInstanceStatus'],
-        instance['AvailabilityZone'],
+        instance['AvailabilityZone'] if instance['MultiAZ'] is False else ', '.join([instance['AvailabilityZone'], instance['SecondaryAvailabilityZone']]),
         print_bool(instance['MultiAZ']),
         instance['DBSubnetGroup']['VpcId'],
+        print_vpc_sgs(instance['VpcSecurityGroups']),
         print_bool(instance['AutoMinorVersionUpgrade']),
         'Public' if instance['PubliclyAccessible'] == True else 'Private',      
         '%s:%s' % (instance['Endpoint']['Address'], instance['Endpoint']['Port']),
@@ -66,7 +79,7 @@ def print_instances(instances_list, short=False):
   rows = sorted(rows, key=lambda p: p[0])
 
   if short is False:
-    rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Storage', 'Engine', 'Status', 'AZ', 'MultiAZ', 'VpcId', 'MinorUpdate', 'Scope', 'Endpoint', 'Backup'])
+    rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Storage', 'Engine', 'Status', 'AZs (1st, 2nd)', 'MultiAZ', 'VpcId', 'SG(s)', 'MinorUpdate', 'Scope', 'Endpoint', 'Backup'])
   else:
     rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Engine', 'Status', 'MultiAZ', 'VpcId', 'Scope'])
 

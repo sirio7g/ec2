@@ -14,6 +14,9 @@ def print_bool(bool_value):
   return 'Yes' if bool_value == True else 'No'
 
 def get_tags(tags, tag_names):
+  if tags is None:
+    return None
+
   values = {key:'<None>' for key in tag_names}
   for tag in tags:
     if tag['Key'] in tag_names:
@@ -55,12 +58,14 @@ def print_table(rows):
   for row in rows:
     print row_format.format(*row)
 
-def print_instances(instances_list, short=False, header=False, tags=[]):
+def print_instances(instances_list, short=False, header=False, tags=[], filters=None):
   rows = []
   
   for instance in instances_list:
     if instance['State']['Name'] == "running":
         instance_name_or_id = get_tags(instance.get('Tags'), ['Name'])
+        if filters is not None and filters not in instance_name_or_id:
+          continue
         instance_name = instance_name_or_id if instance_name_or_id is not None else instance.get('InstanceId')
         service_name = get_tags(instance.get('Tags'), tags)
         public_ip = instance.get('PublicIpAddress', 'n/a')
@@ -71,7 +76,7 @@ def print_instances(instances_list, short=False, header=False, tags=[]):
         else:
           spot_instance = 'Spot'
         
-        if instance_name == None or instance_name == '':
+        if instance_name == None or instance_name == '' or instance_name == '<None>':
           instance_name = instance.get('InstanceId')
         
         if service_name == None or service_name == '':
@@ -119,9 +124,10 @@ def main(argv):
     short = False
     header = False
     tags=['service', 'Product', 'Scope']
+    filters=None
     
     try:
-      opts, args = getopt.getopt(argv, "r:Ht:", ["region=", "with-header", "short", 'tags='])
+      opts, args = getopt.getopt(argv, "r:Ht:f:", ["region=", "with-header", "short", 'tags=', 'filter='])
 
       for opt, arg in opts:
           if opt in ('-r', '--region'):
@@ -145,12 +151,14 @@ def main(argv):
             header = True
           if opt in ('-t', '--tags'):
             tags = arg.split(',')
+          if opt in ('-f', '--filter'):
+            filters = arg
     except getopt.GetoptError, err:
       print >>sys.stderr, err
       sys.exit(2)
 
     client = boto3.client('ec2', region_name=region)
-    print_table(print_instances(get_instances(client), short=short, header=header, tags=tags))
+    print_table(print_instances(get_instances(client), short=short, header=header, tags=tags, filters=filters))
 
 # run program
 if __name__ == "__main__":

@@ -8,9 +8,10 @@ usePrivateIp=false
 key=${DEFAULT_PEM}
 region=${DEFAULT_REGION}
 user=${DEFAULT_USER}
+filter=""
 
 # Extract options
-while getopts "u:k:c:r:t:ixhps" opt; do
+while getopts "u:k:c:r:t:f:ixhps" opt; do
   case $opt in
     u)
       user=$OPTARG
@@ -40,6 +41,9 @@ while getopts "u:k:c:r:t:ixhps" opt; do
     x)
       xOpt="-X"
       ;;
+    f)
+      filter=" -f ${OPTARG}"
+      ;;
     h)
       echo "\nDisplay and connect easely to your EC2 instance(s)"
       echo "Usage: $0 [-u user] [-x] [-c \"command\"] [-r eu|us|us-west-1|region]"
@@ -53,6 +57,7 @@ while getopts "u:k:c:r:t:ixhps" opt; do
       echo "\t-s Short view"
       echo "\t-t Tags, comma separated (no spaces)"      
       echo "\t-c \"command (sent by ssh)\""
+      echo "\t-f filter by tag name"
       echo "\nAll the arguments are optional, set the default properties in ~/.ec2-default.props"
       exit 1
       ;;
@@ -85,12 +90,12 @@ echo "\033[33mRegion: $region\033[0m"
 # Print info and quit
 if [ "$infoOpt" = "Y" ]
 then
-  ${EC2_SCRIPT_HOME}/bin/ec2-list ${SHORT} --with-header --region $region $tags
+  ${EC2_SCRIPT_HOME}/bin/ec2-list ${SHORT} --with-header --region $region $tags $filter
   exit 0
 fi
 
 # Get hostname
-hosts=`$EC2_SCRIPT_HOME/bin/ec2-list --region $region $tags`
+hosts=`$EC2_SCRIPT_HOME/bin/ec2-list --region $region $tags $filter`
 name="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $1 }'`"
 if [ $usePrivateIp == true ]
 then 
