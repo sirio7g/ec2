@@ -2,12 +2,12 @@
 
 import os
 import sys
-import getopt
-from sys import stderr
 import boto3
 import time
 import pytz
 from datetime import datetime
+import argparse
+
 
 class bcolors:
     HEADER = '\033[95m'
@@ -18,6 +18,7 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+
 
 def withcolor(text, from_text=None):
   if text is None:
@@ -35,6 +36,7 @@ def withcolor(text, from_text=None):
   else:
     return text
 
+
 def prompt_confirmation(message):
   answer = None
   while answer not in ("yes", "no"):
@@ -46,8 +48,10 @@ def prompt_confirmation(message):
     else:
       print("Please enter 'yes' or 'no'.")  
 
+
 def generate_tags(template_version, template_file):
   return [{'template_version': template_version}, {'template_file': template_file}]
+
 
 def wait_for_status(client, change_set_name, stack_name, status_type = 'Status', polling_interval=3):
   proceed = True
@@ -81,6 +85,7 @@ def wait_for_status(client, change_set_name, stack_name, status_type = 'Status',
       print("Status: %s. Reason: %s" % (withcolor(response.get(status_type)), response.get('StatusReason')))
       break
   return proceed
+
 
 def wait_for_stack_status(client, stack_name, client_token, polling_interval=3):
   response = None
@@ -141,6 +146,7 @@ def build_params(existing_params, new_params):
 
   return params_list
 
+
 def create_change_set(client, stack_name, template_file, params, capabilities):
   change_set_name = "%s-%s" % (stack_name, int(time.time()))
   change_set = client.create_change_set(
@@ -154,6 +160,7 @@ def create_change_set(client, stack_name, template_file, params, capabilities):
   print("Created change set: %s" % change_set_name)
   return change_set_name
 
+
 def update_change_set(client, change_set_name, stack_name):
   client_token = "Event-%s-%s" % (int(time.time()), change_set_name)
   print("Updating change set '%s' for stack '%s' ..." % (change_set_name, stack_name))
@@ -164,6 +171,7 @@ def update_change_set(client, change_set_name, stack_name):
   )
   return client_token
 
+
 def delete_change_set(client, change_set_name, stack_name):
   print("Cleaning up change set '%s'" % change_set_name)
 
@@ -171,6 +179,7 @@ def delete_change_set(client, change_set_name, stack_name):
       ChangeSetName = change_set_name,
       StackName = stack_name
   )
+
 
 def print_change_set(client, change_set_name, stack_name):
   response = client.describe_change_set(
@@ -184,17 +193,20 @@ def print_change_set(client, change_set_name, stack_name):
     print("\tAction: %s\n\tReplacement: %s\n\tResourceType: %s\n\tLogicalResourceId: %s\n\tPhysicalResourceId: %s\n\t"
       % (withcolor(resource.get('Action')), withcolor(resource.get('Replacement')), resource.get('ResourceType'), resource.get('LogicalResourceId'), resource.get('PhysicalResourceId')))
 
+
 def print_status(status, reason):
   if reason == None:
     return status
   else:
     return "%s (%s)" % (status, reason)
 
+
 def get_file_as_string(template_file):
   data = None
   with open(template_file, 'r') as myfile:
     data = myfile.read()  
   return data
+
 
 def print_template(params, capabilities):
   print('\nParameters:\n')
@@ -206,9 +218,11 @@ def print_template(params, capabilities):
     for capability in capabilities:
       print('\t%s\n' % (capability))
 
+
 def validate_template(client, template_file):
   template = client.validate_template(TemplateBody = get_file_as_string(template_file))
   return template.get('Parameters'), template.get('Capabilities') 
+
 
 def get_stacks(client):
   stacks = []
@@ -219,15 +233,18 @@ def get_stacks(client):
 
   return stacks
 
+
 def get_stacks_params_by_name(client, stack_name):
   response = client.describe_stacks(StackName = stack_name)
   for stack in response['Stacks']:
     return stack['Parameters']
 
+
 def print_table(rows):
   row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
   for row in rows:
     print row_format.format(*row)
+
 
 def print_stacks(rset, short=False):
   rows = []
@@ -244,6 +261,7 @@ def print_stacks(rset, short=False):
   rows.insert(0, ['Name', 'Description', 'Status', 'Created', 'Updated'])
   return rows
 
+
 def update(client, stack_name, template_file):
   params, capabilities = validate_template(client, template_file)
   change_set_name = create_change_set(client, stack_name, template_file, params, capabilities)
@@ -256,57 +274,61 @@ def update(client, stack_name, template_file):
   delete_change_set(client, change_set_name, stack_name)
 
 
-# parse given parameters
+def diff(client, stack_name, local_file):
+  response = client.get_template(
+      StackName=stack_name,
+      TemplateStage='Original'
+  )
+
+  tmp_filename = "/tmp/remote_%s_%s" % (stack_name, time.time())
+  
+  try:
+    f = open(tmp_filename, "w")
+    f.write(response["TemplateBody"])
+  finally:
+    if f:
+      f.close()
+  
+  os.system("vimdiff -RZ %s %s" % (tmp_filename, local_file))
+
+
 def main(argv):
-    region = 'us-east-1'
-    stack_name = None
-    template_file = None
-    command = None
-    
-    try:
-      opts, args = getopt.getopt(argv, "r:n:v:u:h")
+    parser = argparse.ArgumentParser(
+            description="AWS CloudFormation command-line helper.",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("-r", "--region", default="us-east-1", help="AWS region ID", required=False)
+    subparsers = parser.add_subparsers(dest="command_name", help="Available commands")
 
-      for opt, arg in opts:
-          if opt in('-r'):
-            if arg == 'tokyo':
-              region = 'ap-northeast-1'
-            elif arg == 'mumbai':
-              region = 'ap-douth-1'
-            elif arg == 'us-east':
-              region = 'us-east-1'
-            elif arg == 'dublin':
-              region = 'eu-west-1'
-            elif arg == 'singapore':
-              region = 'ap-southeast-1'
-            elif arg == 'canada':
-              region = 'ca-central-1'
-          if opt in('-n'):
-            stack_name = arg
-          if opt in('-v'):
-            command = 'validate_template'
-            template_file = arg
-          if opt in('-u'):
-            command = 'update_template'
-            template_file = arg
-          if opt in('-h'):
-            print("CloudFormation on command-line:\ncf [-r region] [-v template_file] [-n stack_name -u template_file]")
-            sys.exit(0)            
-    except getopt.GetoptError, err:
-      print >>sys.stderr, err
-      sys.exit(2)
+    parser_validate = subparsers.add_parser("validate", help="Validate local template file")
+    parser_validate.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
 
-    print("Region: " + region)
-    client = boto3.client('cloudformation', region_name=region)
+    parser_diff = subparsers.add_parser("diff", help="Compare local template file with the current version loaded into CloudFormation")
+    parser_diff.add_argument("stack_name", default=None, help="The name of the existing stack")
+    parser_diff.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
 
-    if command == 'validate_template':
-      params, capabilities = validate_template(client, template_file)
+    parser_update = subparsers.add_parser("update", help="Update template")
+    parser_update.add_argument("stack_name", default=None, help="The name of the existing stack")
+    parser_update.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
+
+    subparsers.add_parser("list", help="List CloudFormation stacks")
+
+    args = parser.parse_args()
+
+    print("Region: " + args.region)
+    client = boto3.client('cloudformation', region_name=args.region)
+
+    if args.command_name == "validate":
+      params, capabilities = validate_template(client, args.template_file)
       print_template(params, capabilities)
-    elif command == 'update_template':
-      update(client, stack_name, template_file)
+    elif args.command_name == "update":
+      update(client, args.stack_name, args.template_file)
+    elif args.command_name == "diff":
+      diff(client, args.stack_name, args.template_file)
     else:
       print_table(print_stacks(get_stacks(client)))
     print("Goodbye")
 
-# run program
+
 if __name__ == "__main__":
     main(sys.argv[1:])
