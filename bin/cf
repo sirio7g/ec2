@@ -8,6 +8,14 @@ import pytz
 from datetime import datetime
 import argparse
 
+REGIONS = {
+  "tokyo": "ap-northeast-1",
+  "mumbai": "ap-douth-1",
+  "us-east": "us-east-1",
+  "dublin": "eu-west-1",
+  "singapore": "ap-southeast-1",
+  "canada": "ca-central-1"
+}
 
 class bcolors:
     HEADER = '\033[95m'
@@ -252,7 +260,7 @@ def print_stacks(rset, short=False):
   for record in rset:
     rows.append([
       record['StackName'], 
-      record['Description'] if record.get('Description') else 'N/A',
+      record['Description'].replace("\n", " ") if record.get('Description') else 'N/A',
       print_status(record.get('StackStatus'), record.get('StackStatusReason')),
       record['CreationTime'].strftime("%d/%m/%Y %H:%M:%S"),
       record['LastUpdatedTime'].strftime("%d/%m/%Y %H:%M:%S") if record.get('LastUpdatedTime') else 'N/A'
@@ -314,9 +322,10 @@ def main(argv):
     subparsers.add_parser("list", help="List CloudFormation stacks")
 
     args = parser.parse_args()
+    region = REGIONS.get(args.region, args.region)
 
-    print("Region: " + args.region)
-    client = boto3.client('cloudformation', region_name=args.region)
+    print("Region: " + region)
+    client = boto3.client('cloudformation', region_name=region)
 
     if args.command_name == "validate":
       params, capabilities = validate_template(client, args.template_file)
