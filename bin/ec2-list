@@ -30,6 +30,14 @@ def get_tags(tags, tag_names):
   else:
     return None
 
+def get_tags_from_filter(filters):
+  tags_filters = []
+  if filters is not None and "=" in filters:
+    for tag in filters.split(","):
+      tag_name, tag_value = tuple(tag.split("="))
+      tags_filters.append({"Name": "tag:%s" % (tag_name), "Values":[tag_value]})
+  return tags_filters
+
 def print_sg(sgs):
   sg_list = []
   for sg in sgs:
@@ -43,14 +51,13 @@ def get_uptime(launch_time):
   else:
     return str(datetime.timedelta(seconds=elapsed_time))
 
-def get_instances(client):
+def get_instances(client, filters):
   instance_list = []
   paginator = client.get_paginator('describe_instances')
-  page_iterator = paginator.paginate()
+  page_iterator = paginator.paginate(Filters=get_tags_from_filter(filters))
   for page in page_iterator:
     for reservations in page['Reservations']:
       instance_list = instance_list + reservations['Instances']
-  
   return instance_list
 
 def print_table(rows):
@@ -64,9 +71,9 @@ def print_instances(instances_list, short=False, header=False, tags=[], filters=
   for instance in instances_list:
     if instance['State']['Name'] == "running":
         instance_name_or_id = get_tags(instance.get('Tags'), ['Name'])
-        if filters is not None and filters not in instance_name_or_id:
-          continue
         instance_name = instance_name_or_id if instance_name_or_id is not None else instance.get('InstanceId')
+        if filters is not None and filters not in instance_name:
+          continue        
         service_name = get_tags(instance.get('Tags'), tags)
         public_ip = instance.get('PublicIpAddress', 'n/a')
         public_dns = instance.get('PublicDnsName', public_ip)        
@@ -158,7 +165,7 @@ def main(argv):
       sys.exit(2)
 
     client = boto3.client('ec2', region_name=region)
-    print_table(print_instances(get_instances(client), short=short, header=header, tags=tags, filters=filters))
+    print_table(print_instances(get_instances(client, filters), short=short, header=header, tags=tags, filters=filters))
 
 # run program
 if __name__ == "__main__":

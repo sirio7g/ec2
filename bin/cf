@@ -1,20 +1,24 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import os
 import sys
 import boto3
 import time
 import pytz
-from datetime import datetime
+from datetime import date, datetime
 import argparse
+import hashlib
+import json
 
 REGIONS = {
   "tokyo": "ap-northeast-1",
-  "mumbai": "ap-douth-1",
+  "mumbai": "ap-south-1",
   "us-east": "us-east-1",
   "dublin": "eu-west-1",
   "singapore": "ap-southeast-1",
-  "canada": "ca-central-1"
+  "sydney": "ap-southeast-2",  
+  "canada": "ca-central-1",
+  "oregon": "us-west-2"
 }
 
 class bcolors:
@@ -45,20 +49,38 @@ def withcolor(text, from_text=None):
     return text
 
 
-def prompt_confirmation(message):
-  answer = None
-  while answer not in ("yes", "no"):
-    answer = raw_input(message)
-    if answer == "yes":
-      return True
-    elif answer == "no":
-      return False
-    else:
-      print("Please enter 'yes' or 'no'.")  
+def prompt_confirmation(message, hard_stop=True):
+    answer = None
+    while answer not in ("yes", "no"):
+        answer = input(message + " [Y/N]: ")
+        if answer in ["yes", "y", "Y"]:
+            return True
+        elif answer in ["no", "n", "NO"]:
+            if hard_stop:
+                print("Aborting script!")				
+                sys.exit(1)
+            else:
+                return False
+        else:
+            print("Please enter 'yes/y/Y' or 'no/n/N'.")
 
 
 def generate_tags(template_version, template_file):
   return [{'template_version': template_version}, {'template_file': template_file}]
+
+
+def get_bucket_name():
+  response = boto3.client("sts").get_caller_identity()
+  return "cloudformation_tmp_%s_%s" % (response["Account"], response["Arn"].split("/")[-1:][0])
+
+
+def put_template_file(region, stack_name, template_file):
+  s3 = boto3.client('s3', region_name=region)
+  bucket_name = get_bucket_name()
+  filename = "tmp_template/%s/%s_%s" % (date.today().strftime("%Y_%m_%d"), stack_name, time.time())
+  with open(template_file, "rb") as f:
+    s3.upload_fileobj(f, bucket_name, filename)
+  return "s3://%s/%s" % (bucket_name, filename)
 
 
 def wait_for_status(client, change_set_name, stack_name, status_type = 'Status', polling_interval=3):
@@ -78,7 +100,7 @@ def wait_for_status(client, change_set_name, stack_name, status_type = 'Status',
         iteration += 1
         continue
     except ClientError as e:
-      print "Unexpected error: %s" % e
+      print("Unexpected error: %s" % e)
       sys.exit(1)
 
     status = response.get(status_type)
@@ -135,7 +157,7 @@ def wait_for_stack_status(client, stack_name, client_token, polling_interval=3):
     time.sleep(polling_interval)
 
 
-def build_params(existing_params, new_params):
+def build_params(existing_params, new_params, user_provided_params):
   params_list = []
   for param in new_params:
     found = False
@@ -152,19 +174,31 @@ def build_params(existing_params, new_params):
       else:
         params_list.append({"ParameterKey" : param_key, "ParameterValue": ""})
 
+  upsert_params(params_list, user_provided_params)
   return params_list
 
 
-def create_change_set(client, stack_name, template_file, params, capabilities):
+def create_change_set(client, stack_name, template_file, bucket_name, region, params, capabilities, user_provided_params):
   change_set_name = "%s-%s" % (stack_name, int(time.time()))
-  change_set = client.create_change_set(
-    StackName = stack_name,
-    TemplateBody = get_file_as_string(template_file),
-    ChangeSetName = change_set_name,
-    ChangeSetType = 'UPDATE',
-    Parameters = build_params(get_stacks_params_by_name(client, stack_name), params),
-    Capabilities = [] if capabilities is None else capabilities
-  )
+  if bucket_name is not None:
+    obj_name = upload_file_to_s3(region, bucket_name, template_file)
+    client.create_change_set(
+      StackName = stack_name,
+      TemplateURL= f"https://s3.amazonaws.com/{bucket_name}/{obj_name}",
+      ChangeSetName = change_set_name,
+      ChangeSetType = 'UPDATE',
+      Parameters = build_params(get_stacks_params_by_name(client, stack_name), params, user_provided_params),
+      Capabilities = [] if capabilities is None else capabilities
+    )
+  else:
+    client.create_change_set(
+      StackName = stack_name,
+      TemplateBody = get_file_as_string(template_file),
+      ChangeSetName = change_set_name,
+      ChangeSetType = 'UPDATE',
+      Parameters = build_params(get_stacks_params_by_name(client, stack_name), params, user_provided_params),
+      Capabilities = [] if capabilities is None else capabilities
+    )
   print("Created change set: %s" % change_set_name)
   return change_set_name
 
@@ -227,8 +261,20 @@ def print_template(params, capabilities):
       print('\t%s\n' % (capability))
 
 
-def validate_template(client, template_file):
-  template = client.validate_template(TemplateBody = get_file_as_string(template_file))
+def upload_file_to_s3(region, bucket_name, filename):
+    object_name = hashlib.sha1(bytes("%s%s" % (filename, time.time()), "utf-8")).hexdigest()
+    client_s3 = boto3.client("s3", region_name=region)
+    client_s3.upload_file(filename, bucket_name, f"cf-templates/{object_name}")
+    print(f"Copied file over to S3: https://s3.amazonaws.com/{bucket_name}/{object_name}")
+    return f"cf-templates/{object_name}"
+
+
+def validate_template(client, template_file, bucket_name, region):
+  if bucket_name is not None:
+    obj_name = upload_file_to_s3(region, bucket_name, template_file)
+    template = client.validate_template(TemplateURL=f"https://s3.amazonaws.com/{bucket_name}/{obj_name}")    
+  else:
+    template = client.validate_template(TemplateBody = get_file_as_string(template_file))
   return template.get('Parameters'), template.get('Capabilities') 
 
 
@@ -251,7 +297,7 @@ def get_stacks_params_by_name(client, stack_name):
 def print_table(rows):
   row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
   for row in rows:
-    print row_format.format(*row)
+    print(row_format.format(*row))
 
 
 def print_stacks(rset, short=False):
@@ -270,12 +316,39 @@ def print_stacks(rset, short=False):
   return rows
 
 
-def update(client, stack_name, template_file):
-  params, capabilities = validate_template(client, template_file)
-  change_set_name = create_change_set(client, stack_name, template_file, params, capabilities)
+def print_change_set_params(client, change_set_name, stack_name):
+  response = client.describe_change_set(
+      ChangeSetName=change_set_name,
+      StackName=stack_name
+  )
+  print("\nParameters:")
+  rows = [["\tKey", "Value"]]
+  for param in sorted(response["Parameters"], key = lambda i: i['ParameterKey']):
+    rows.append(["\t%s" % (param["ParameterKey"]), param["ParameterValue"]])
+  print_table(rows)
+
+
+def upsert_params(params_list, new_params):
+  if new_params is not None and len(new_params) > 0:
+    for param in new_params.split(","):
+      k, v = param.split("=")
+      found = False
+      for existing_param in params_list:
+        if existing_param["ParameterKey"] == k:
+          existing_param["ParameterValue"] = v
+          existing_param["UsePreviousValue"] = False
+          found = True
+      if not found:
+        params_list.append({"ParameterKey": k, "ParameterValue": v, "UsePreviousValue": False})
+
+
+def update(client, stack_name, template_file, bucket_name, user_provided_params, region):
+  params, capabilities = validate_template(client, template_file, bucket_name, region)
+  change_set_name = create_change_set(client, stack_name, template_file, bucket_name, region, params, capabilities, user_provided_params)
   if wait_for_status(client, change_set_name, stack_name):
+    print_change_set_params(client, change_set_name, stack_name)
     print_change_set(client, change_set_name, stack_name)
-    if prompt_confirmation("Do you want to update the stack (yes/no): "):
+    if prompt_confirmation("Do you want to update the stack: "):
       client_token = update_change_set(client, change_set_name, stack_name)
       wait_for_stack_status(client, stack_name, client_token)
       return
@@ -300,44 +373,83 @@ def diff(client, stack_name, local_file):
   os.system("vimdiff -RZ %s %s" % (tmp_filename, local_file))
 
 
+def parameters(client, stack_name, as_file=None):
+  rows = [["Key", "Value"]]    
+  for param in sorted(get_stacks_params_by_name(client, stack_name), key = lambda i: i['ParameterKey']) :
+    rows.append([param["ParameterKey"], param["ParameterValue"]])
+    
+  print_table(rows)
+
+  if as_file is not None:
+    with open(as_file, 'w', encoding='utf-8') as f:
+      json.dump(sorted(get_stacks_params_by_name(client, stack_name), key = lambda i: i['ParameterKey']), f, ensure_ascii=False, indent=4)
+    print(f"\nGenerated file: {as_file}")
+    print(f"e.g. \"aws cloudformation create-stack --stack-name test-local-stack --template-body file://template.json --parameters file://{as_file}\"")
+
+
+
+def clone(client, stack_name, template_file):
+  params = []
+  for param in sorted(get_stacks_params_by_name(client, stack_name), key = lambda i: i['ParameterKey']) :
+    params.append("ParameterKey=%s,ParameterValue=%s" % (param["ParameterKey"], param["ParameterValue"]))
+  print("aws cloudformation create-stack --stack-name %s /" % stack_name)
+  print("--template-body %s /" % template_file)
+  print("--parameter %s" % " /\n".join(params))
+
+
 def main(argv):
-    parser = argparse.ArgumentParser(
-            description="AWS CloudFormation command-line helper.",
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument("-r", "--region", default="us-east-1", help="AWS region ID", required=False)
-    subparsers = parser.add_subparsers(dest="command_name", help="Available commands")
+  parser = argparse.ArgumentParser(
+          description="AWS CloudFormation command-line helper.",
+          formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+  )
+  parser.add_argument("-r", "--region", default="us-east-1", help="AWS region ID", required=False)
+  subparsers = parser.add_subparsers(dest="command_name", help="Available commands")
 
-    parser_validate = subparsers.add_parser("validate", help="Validate local template file")
-    parser_validate.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
+  parser_validate = subparsers.add_parser("validate", help="Validate local template file")
+  parser_validate.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
+  parser_validate.add_argument("-b", "--bucket-name", default=None, help="If bucket name is provided the file will store in S3 (required for large template)")
 
-    parser_diff = subparsers.add_parser("diff", help="Compare local template file with the current version loaded into CloudFormation")
-    parser_diff.add_argument("stack_name", default=None, help="The name of the existing stack")
-    parser_diff.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
+  parser_diff = subparsers.add_parser("diff", help="Compare local template file with the current version loaded into CloudFormation")
+  parser_diff.add_argument("stack_name", default=None, help="The name of the existing stack")
+  parser_diff.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
 
-    parser_update = subparsers.add_parser("update", help="Update template")
-    parser_update.add_argument("stack_name", default=None, help="The name of the existing stack")
-    parser_update.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
+  parser_update = subparsers.add_parser("update", help="Update template")
+  parser_update.add_argument("stack_name", default=None, help="The name of the existing stack")
+  parser_update.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
+  parser_update.add_argument("-p", "--params", default=None, help="Comma separated key value params e.g. Key=Value,Key2=Value2. Those will be added to the existing ones", required=False)
+  parser_update.add_argument("-b", "--bucket-name", default=None, help="If bucket name is provided the file will store in S3 (required for large template)")
 
-    subparsers.add_parser("list", help="List CloudFormation stacks")
+  parser_getparams = subparsers.add_parser("params", help="List stack parameters")
+  parser_getparams.add_argument("stack_name", default=None, help="The name of the existing stack")
+  parser_getparams.add_argument("-f", "--to-file", default=None, help="Print params list into a given filename (format used by aws cli)", required=False)
 
-    args = parser.parse_args()
-    region = REGIONS.get(args.region, args.region)
+  parser_clone = subparsers.add_parser("clone", help="Clone existing stack")
+  parser_clone.add_argument("stack_name", default=None, help="The name of the existing stack")
+  parser_clone.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
 
-    print("Region: " + region)
-    client = boto3.client('cloudformation', region_name=region)
+  subparsers.add_parser("list", help="List CloudFormation stacks")
 
-    if args.command_name == "validate":
-      params, capabilities = validate_template(client, args.template_file)
-      print_template(params, capabilities)
-    elif args.command_name == "update":
-      update(client, args.stack_name, args.template_file)
-    elif args.command_name == "diff":
-      diff(client, args.stack_name, args.template_file)
-    else:
-      print_table(print_stacks(get_stacks(client)))
+  args = parser.parse_args()
+  region = REGIONS.get(args.region, args.region)
+
+  print("Region: " + region)
+  client = boto3.client('cloudformation', region_name=region)
+
+  if args.command_name == "validate":
+    params, capabilities = validate_template(client, args.template_file, args.bucket_name, region)
+    print_template(params, capabilities)
+  elif args.command_name == "update":
+    update(client, args.stack_name, args.template_file, args.bucket_name, args.params, region)
     print("Goodbye")
+  elif args.command_name == "diff":
+    diff(client, args.stack_name, args.template_file)
+  elif args.command_name == "params":
+    parameters(client, args.stack_name, args.to_file)
+  elif args.command_name == "clone":
+    clone(client, args.stack_name, args.template_file)
+  else:
+    print_table(print_stacks(get_stacks(client)))
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+  main(sys.argv[1:])

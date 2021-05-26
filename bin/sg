@@ -7,6 +7,7 @@ from sys import stderr
 import boto3
 from botocore.exceptions import ClientError
 
+is_descr = False
 
 def get_sgs(client, group_ref=None):
   sgs = []
@@ -54,16 +55,23 @@ def print_sgs(sg_list, header=False):
   return rows
 
 
+def get_cidr_text(cidr, description):
+  if is_descr and description is not None:
+    return "%s (%s)" % (cidr, description)
+  else:
+    return cidr
+
+
 def print_cidr(rule):
   cidrs = []
   if rule.get('IpRanges'):
-    cidrs += [cidr['CidrIp'] for cidr in rule.get('IpRanges')]
+    cidrs += [get_cidr_text(cidr['CidrIp'], cidr.get("Description")) for cidr in rule.get('IpRanges')]
   if rule.get('Ipv6Ranges'):
-    cidrs += [cidr['CidrIpv6'] for cidr in rule.get('Ipv6Ranges')]
+    cidrs += [get_cidr_text(cidr['CidrIpv6'], cidr.get("Description")) for cidr in rule.get('Ipv6Ranges')]
   if rule.get('PrefixListIds'):
-    cidrs += [cidr['PrefixListId'] for cidr in rule.get('PrefixListIds')]
+    cidrs += [get_cidr_text(cidr['PrefixListId'], cidr.get("Description")) for cidr in rule.get('PrefixListIds')]
   if rule.get('UserIdGroupPairs'):
-    cidrs += [cidr['GroupId'] for cidr in rule.get('UserIdGroupPairs')]
+    cidrs += [get_cidr_text(cidr['GroupId'], cidr.get("Description")) for cidr in rule.get('UserIdGroupPairs')]
 
   return ", ".join(cidrs)
 
@@ -103,9 +111,10 @@ def main(argv):
     region = 'us-east-1'
     sg_id = None
     header = False
+    global is_descr
     
     try:
-      opts, args = getopt.getopt(argv, "r:Hs:", ["region", "with-header", "security-group"])
+      opts, args = getopt.getopt(argv, "r:Hs:d", ["region", "with-header", "security-group", "with-description"])
 
       for opt, arg in opts:
           if opt in('-r', '--region'):
@@ -119,12 +128,18 @@ def main(argv):
               region = 'eu-west-1'
             elif arg == 'singapore':
               region = 'ap-southeast-1'
+            elif arg == 'sydney':
+              region = 'ap-southeast-2'
             elif arg == 'canada':
               region = 'ca-central-1'
+            elif arg == 'oregon':
+              region = 'us-west-2'              
           if opt in ('-s', '--security-group'):
             sg_id = arg
           if opt in ('-H', '--with-header'):
             header = True
+          if opt in ('-d', '--with-description'):
+            is_descr = True
     except getopt.GetoptError, err:
       print >>sys.stderr, err
       sys.exit(2)

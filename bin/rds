@@ -43,10 +43,14 @@ def print_table(rows):
     print row_format.format(*row)
 
 
-def print_instances(instances_list, short=False):
+def print_instances(instances_list, short=False, summary=False):
   rows = []
+  sum_storage = 0
+  sum_instances = 0
   
   for instance in instances_list:
+    sum_storage += instance['AllocatedStorage']*2 if instance['MultiAZ'] else instance['AllocatedStorage']
+    sum_instances += 2 if instance['MultiAZ'] else 1
     if short is False:
       rows.append([
         instance['DBInstanceIdentifier'], 
@@ -57,6 +61,7 @@ def print_instances(instances_list, short=False):
         instance['DBInstanceStatus'],
         instance['AvailabilityZone'] if instance['MultiAZ'] is False else ', '.join([instance['AvailabilityZone'], instance['SecondaryAvailabilityZone']]),
         print_bool(instance['MultiAZ']),
+        print_bool(instance['StorageEncrypted']),
         instance['DBSubnetGroup']['VpcId'],
         print_vpc_sgs(instance['VpcSecurityGroups']),
         print_bool(instance['AutoMinorVersionUpgrade']),
@@ -78,10 +83,14 @@ def print_instances(instances_list, short=False):
 
   rows = sorted(rows, key=lambda p: p[0])
 
-  if short is False:
-    rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Storage', 'Engine', 'Status', 'AZs (1st, 2nd)', 'MultiAZ', 'VpcId', 'SG(s)', 'MinorUpdate', 'Scope', 'Endpoint', 'Backup'])
+  if not summary:
+    if short is False:
+      rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Storage', 'Engine', 'Status', 'AZs (1st, 2nd)', 'MultiAZ', 'Encrypted', 'VpcId', 'SG(s)', 'MinorUpdate', 'Scope', 'Endpoint', 'Backup'])
+    else:
+      rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Engine', 'Status', 'MultiAZ', 'VpcId', 'Scope'])
   else:
-    rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Engine', 'Status', 'MultiAZ', 'VpcId', 'Scope'])
+    print("Number of Db instances: %d, total GB: %s. This value includes replicas (i.e. MultiAZ)." % (sum_instances, sum_storage))
+    return []
 
   return rows
 
@@ -89,33 +98,40 @@ def print_instances(instances_list, short=False):
 def main(argv):
     region = 'us-east-1'
     short = False
+    summary = False
     
     try:
-      opts, args = getopt.getopt(argv, "r:s")
+      opts, args = getopt.getopt(argv, "r:sc")
 
       for opt, arg in opts:
           if opt in('-r'):
             if arg == 'tokyo':
               region = 'ap-northeast-1'
             elif arg == 'mumbai':
-              region = 'ap-douth-1'
+              region = 'ap-south-1'
             elif arg == 'us-east':
               region = 'us-east-1'
             elif arg == 'dublin':
               region = 'eu-west-1'
             elif arg == 'singapore':
               region = 'ap-southeast-1'
+            elif arg == 'sydney':
+              region = 'ap-southeast-2'
             elif arg == 'canada':
               region = 'ca-central-1'
+            elif arg == 'oregon':
+              region = 'us-west-2'
           if opt in ('-s'):
             short = True
+          if opt in ('-c'):
+            summary = True
     except getopt.GetoptError, err:
       print >>sys.stderr, err
       sys.exit(2)
 
     print("Region: " + region)
     client = boto3.client('rds', region_name=region)
-    print_table(print_instances(get_rds_instances(client), short=short))
+    print_table(print_instances(get_rds_instances(client), short=short, summary=summary))
 
 
 # run program

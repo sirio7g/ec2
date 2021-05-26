@@ -82,6 +82,10 @@ case "$region" in
 		region="ap-southeast-1";;
 	canada)
 		region="ca-central-1";;
+  sydney)
+    region="ap-southeast-2";;
+  oregon)
+    region="us-west-2";;
 esac
 
 # Print region info

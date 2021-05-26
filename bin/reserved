@@ -154,6 +154,8 @@ def main(argv):
               region = 'eu-west-1'
             elif arg == 'singapore':
               region = 'ap-southeast-1'
+            elif arg == 'sydney':
+              region = 'ap-southeast-2'
             elif arg == 'canada':
               region = 'ca-central-1'
           if opt in ('-s'):
@@ -163,7 +165,7 @@ def main(argv):
       sys.exit(2)
 
     if region == None:
-      for region_name in ['us-east-1', 'ap-northeast-1', 'eu-west-1', 'ap-southeast-1', 'ca-central-1']:
+      for region_name in ['us-east-1', 'ap-northeast-1', 'eu-west-1', 'ap-southeast-1', 'ca-central-1', 'ap-southeast-2']:
         print("Region: " + region_name)
         client = boto3.client('ec2', region_name=region_name)    
         summary = print_summary(add_reserved_nf_by_class(client, get_ec2_instances_by_type(client)))

@@ -92,8 +92,12 @@ def main(argv):
               region = 'eu-west-1'
             elif arg == 'singapore':
               region = 'ap-southeast-1'
+            elif arg == 'sydney':
+              region = 'ap-southeast-2'
             elif arg == 'canada':
               region = 'ca-central-1'
+            elif arg == 'oregon':
+              region = 'us-west-2'
           if opt in ('-s'):
             short = True
     except getopt.GetoptError, err:

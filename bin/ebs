@@ -69,7 +69,7 @@ def print_volumes(volumes_list, short=False):
         device,
         dot,
         'Yes' if instance.get('Encrypted') else 'No',
-        get_tag(instance.get('Tags'), 'Name', '')
+        get_tag(instance.get('Tags'), 'service', '')
         ])
 
   rows = sorted(rows, key=lambda p: p[0])
@@ -98,6 +98,8 @@ def main(argv):
               region = 'eu-west-1'
             elif arg == 'singapore':
               region = 'ap-southeast-1'
+            elif arg == 'sydney':
+              region = 'ap-southeast-2'
             elif arg == 'canada':
               region = 'ca-central-1'
           if opt in ('-s'):
