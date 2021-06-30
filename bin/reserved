@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import os
 import sys
@@ -6,6 +6,22 @@ import getopt
 from sys import stderr
 import boto3
 import collections
+
+
+REGIONS = {
+  "tokyo": "ap-northeast-1",
+  "mumbai": "ap-south-1",
+  "us-east": "us-east-1",
+  "dublin": "eu-west-1",
+  "singapore": "ap-southeast-1",
+  "sydney": "ap-southeast-2",  
+  "canada": "ca-central-1",
+  "oregon": "us-west-2",
+  "frankfurt": "eu-central-1",  
+  "california": "us-west-1",
+  "brazil": "sa-east-1"
+}
+
 
 nf_power = {
   'nano': 0.25,
@@ -128,7 +144,7 @@ def print_summary(instances):
 def print_table(rows):
   row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
   for row in rows:
-    print row_format.format(*row)
+    print(row_format.format(*row))
 
 
 # parse given parameters
@@ -144,28 +160,15 @@ def main(argv):
 
       for opt, arg in opts:
           if opt in('-r'):
-            if arg == 'tokyo':
-              region = 'ap-northeast-1'
-            elif arg == 'mumbai':
-              region = 'ap-south-1'
-            elif arg == 'us-east':
-              region = 'us-east-1'
-            elif arg == 'dublin':
-              region = 'eu-west-1'
-            elif arg == 'singapore':
-              region = 'ap-southeast-1'
-            elif arg == 'sydney':
-              region = 'ap-southeast-2'
-            elif arg == 'canada':
-              region = 'ca-central-1'
+            region = REGIONS.get(arg, "us-east-1")            
           if opt in ('-s'):
             short = True
-    except getopt.GetoptError, err:
+    except getopt.GetoptError as err:
       print >>sys.stderr, err
       sys.exit(2)
 
     if region == None:
-      for region_name in ['us-east-1', 'ap-northeast-1', 'eu-west-1', 'ap-southeast-1', 'ca-central-1', 'ap-southeast-2']:
+      for alias_region_name, region_name in REGIONS.items():
         print("Region: " + region_name)
         client = boto3.client('ec2', region_name=region_name)    
         summary = print_summary(add_reserved_nf_by_class(client, get_ec2_instances_by_type(client)))

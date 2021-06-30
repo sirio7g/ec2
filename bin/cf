@@ -18,7 +18,10 @@ REGIONS = {
   "singapore": "ap-southeast-1",
   "sydney": "ap-southeast-2",  
   "canada": "ca-central-1",
-  "oregon": "us-west-2"
+  "oregon": "us-west-2",
+  "frankfurt": "eu-central-1",  
+  "california": "us-west-1",
+  "brazil": "sa-east-1"
 }
 
 class bcolors:

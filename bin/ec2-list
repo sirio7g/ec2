@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import os
 import sys
@@ -10,8 +10,25 @@ import calendar
 import time
 import datetime
 
+
+REGIONS = {
+  "tokyo": "ap-northeast-1",
+  "mumbai": "ap-south-1",
+  "us-east": "us-east-1",
+  "dublin": "eu-west-1",
+  "singapore": "ap-southeast-1",
+  "sydney": "ap-southeast-2",  
+  "canada": "ca-central-1",
+  "oregon": "us-west-2",
+  "frankfurt": "eu-central-1",  
+  "california": "us-west-1",
+  "brazil": "sa-east-1"
+}
+
+
 def print_bool(bool_value):
   return 'Yes' if bool_value == True else 'No'
+
 
 def get_tags(tags, tag_names):
   if tags is None:
@@ -30,6 +47,7 @@ def get_tags(tags, tag_names):
   else:
     return None
 
+
 def get_tags_from_filter(filters):
   tags_filters = []
   if filters is not None and "=" in filters:
@@ -38,11 +56,13 @@ def get_tags_from_filter(filters):
       tags_filters.append({"Name": "tag:%s" % (tag_name), "Values":[tag_value]})
   return tags_filters
 
+
 def print_sg(sgs):
   sg_list = []
   for sg in sgs:
     sg_list.append(sg['GroupId'])
   return ', '.join(sg_list)
+
 
 def get_uptime(launch_time):
   elapsed_time = int(time.time() - calendar.timegm(launch_time.timetuple()))
@@ -50,6 +70,7 @@ def get_uptime(launch_time):
     return str(datetime.timedelta(seconds=elapsed_time)).split(',')[0]
   else:
     return str(datetime.timedelta(seconds=elapsed_time))
+
 
 def get_instances(client, filters):
   instance_list = []
@@ -60,10 +81,12 @@ def get_instances(client, filters):
       instance_list = instance_list + reservations['Instances']
   return instance_list
 
+
 def print_table(rows):
   row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
   for row in rows:
-    print row_format.format(*row)
+    print(row_format.format(*row))
+
 
 def print_instances(instances_list, short=False, header=False, tags=[], filters=None):
   rows = []
@@ -125,7 +148,7 @@ def print_instances(instances_list, short=False, header=False, tags=[], filters=
 
   return rows
 
-# parse given parameters
+
 def main(argv):
     region = 'us-east-1'
     short = False
@@ -160,13 +183,13 @@ def main(argv):
             tags = arg.split(',')
           if opt in ('-f', '--filter'):
             filters = arg
-    except getopt.GetoptError, err:
+    except getopt.GetoptError as err:
       print >>sys.stderr, err
       sys.exit(2)
 
     client = boto3.client('ec2', region_name=region)
     print_table(print_instances(get_instances(client, filters), short=short, header=header, tags=tags, filters=filters))
 
-# run program
+
 if __name__ == "__main__":
     main(sys.argv[1:])

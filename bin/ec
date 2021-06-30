@@ -1,10 +1,26 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import os
 import sys
 import getopt
 from sys import stderr
 import boto3
+
+
+REGIONS = {
+  "tokyo": "ap-northeast-1",
+  "mumbai": "ap-south-1",
+  "us-east": "us-east-1",
+  "dublin": "eu-west-1",
+  "singapore": "ap-southeast-1",
+  "sydney": "ap-southeast-2",  
+  "canada": "ca-central-1",
+  "oregon": "us-west-2",
+  "frankfurt": "eu-central-1",  
+  "california": "us-west-1",
+  "brazil": "sa-east-1"
+}
+
 
 def print_bool(bool_value):
   return 'Yes' if bool_value == True else 'No'
@@ -33,7 +49,7 @@ def get_cache_instances(client):
 def print_table(rows):
   row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
   for row in rows:
-    print row_format.format(*row)
+    print(row_format.format(*row))
 
 
 def print_instances(instances_list, short=False):
@@ -82,25 +98,10 @@ def main(argv):
 
       for opt, arg in opts:
           if opt in('-r'):
-            if arg == 'tokyo':
-              region = 'ap-northeast-1'
-            elif arg == 'mumbai':
-              region = 'ap-douth-1'
-            elif arg == 'us-east':
-              region = 'us-east-1'
-            elif arg == 'dublin':
-              region = 'eu-west-1'
-            elif arg == 'singapore':
-              region = 'ap-southeast-1'
-            elif arg == 'sydney':
-              region = 'ap-southeast-2'
-            elif arg == 'canada':
-              region = 'ca-central-1'
-            elif arg == 'oregon':
-              region = 'us-west-2'
+            region = REGIONS.get(arg, "us-east-1")            
           if opt in ('-s'):
             short = True
-    except getopt.GetoptError, err:
+    except getopt.GetoptError as err:
       print >>sys.stderr, err
       sys.exit(2)
 
