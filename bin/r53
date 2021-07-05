@@ -92,7 +92,7 @@ def main(argv):
           if opt in('-d'):
             domain = arg
     except getopt.GetoptError as err:
-      print >>sys.stderr, err
+      print(err, file=sys.stderr)
       sys.exit(2)
 
     if domain is not None:

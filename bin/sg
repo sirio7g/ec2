@@ -141,7 +141,7 @@ def main(argv):
           if opt in ('-d', '--with-description'):
             is_descr = True
     except getopt.GetoptError as err:
-      print >>sys.stderr, err
+      print(err, file=sys.stderr)
       sys.exit(2)
 
     client = boto3.client('ec2', region_name=region)

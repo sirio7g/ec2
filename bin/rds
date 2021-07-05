@@ -124,7 +124,7 @@ def main(argv):
           if opt in ('-c'):
             summary = True
     except getopt.GetoptError as err:
-      print >>sys.stderr, err
+      print(err, file=sys.stderr)
       sys.exit(2)
 
     print("Region: " + region)

@@ -184,7 +184,7 @@ def main(argv):
           if opt in ('-f', '--filter'):
             filters = arg
     except getopt.GetoptError as err:
-      print >>sys.stderr, err
+      print(err, file=sys.stderr)
       sys.exit(2)
 
     client = boto3.client('ec2', region_name=region)

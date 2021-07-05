@@ -95,11 +95,11 @@ def main(argv):
 
       for opt, arg in opts:
           if opt in('-r'):
-             region = REGIONS.get(arg, "us-east-1")
+            region = REGIONS.get(arg, "us-east-1")
           if opt in ('-s'):
             short = True
     except getopt.GetoptError as err:
-      print >>sys.stderr, err
+      print(err, file=sys.stderr)
       sys.exit(2)
 
     print("Region: " + region)
