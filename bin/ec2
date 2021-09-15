@@ -92,6 +92,10 @@ case "$region" in
     region="us-west-1";;
   brazil)
     region="sa-east-1";;
+  south-africa)
+    region="af-south-1";;
+  ohio)
+    region="us-east-2";;
 esac
 
 # Print region info
