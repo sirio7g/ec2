@@ -9,6 +9,8 @@ from datetime import date, datetime
 import argparse
 import hashlib
 import json
+from tabulate import tabulate
+
 
 REGIONS = {
   "tokyo": "ap-northeast-1",
@@ -21,7 +23,9 @@ REGIONS = {
   "oregon": "us-west-2",
   "frankfurt": "eu-central-1",  
   "california": "us-west-1",
-  "brazil": "sa-east-1"
+  "brazil": "sa-east-1",
+  "south-africa": "af-south-1",
+  "ohio": "us-east-2"  
 }
 
 class bcolors:
@@ -53,19 +57,19 @@ def withcolor(text, from_text=None):
 
 
 def prompt_confirmation(message, hard_stop=True):
-    answer = None
-    while answer not in ("yes", "no"):
-        answer = input(message + " [Y/N]: ")
-        if answer in ["yes", "y", "Y"]:
-            return True
-        elif answer in ["no", "n", "NO"]:
-            if hard_stop:
-                print("Aborting script!")				
-                sys.exit(1)
-            else:
-                return False
-        else:
-            print("Please enter 'yes/y/Y' or 'no/n/N'.")
+  answer = None
+  while answer not in ("yes", "no"):
+      answer = input(message + " [Y/N]: ")
+      if answer in ["yes", "y", "Y"]:
+          return True
+      elif answer in ["no", "n", "NO"]:
+          if hard_stop:
+              print("Aborting script!")				
+              sys.exit(1)
+          else:
+              return False
+      else:
+          print("Please enter 'yes/y/Y' or 'no/n/N'.")
 
 
 def generate_tags(template_version, template_file):
@@ -381,14 +385,13 @@ def parameters(client, stack_name, as_file=None):
   for param in sorted(get_stacks_params_by_name(client, stack_name), key = lambda i: i['ParameterKey']) :
     rows.append([param["ParameterKey"], param["ParameterValue"]])
     
-  print_table(rows)
+  print(tabulate(rows, ["Parameter Name", "Parameter Value"], tablefmt="plain"))
 
   if as_file is not None:
     with open(as_file, 'w', encoding='utf-8') as f:
       json.dump(sorted(get_stacks_params_by_name(client, stack_name), key = lambda i: i['ParameterKey']), f, ensure_ascii=False, indent=4)
     print(f"\nGenerated file: {as_file}")
     print(f"e.g. \"aws cloudformation create-stack --stack-name test-local-stack --template-body file://template.json --parameters file://{as_file}\"")
-
 
 
 def clone(client, stack_name, template_file):
@@ -398,6 +401,35 @@ def clone(client, stack_name, template_file):
   print("aws cloudformation create-stack --stack-name %s /" % stack_name)
   print("--template-body %s /" % template_file)
   print("--parameter %s" % " /\n".join(params))
+
+
+def download(client, stack_name):
+  if stack_name == None:
+    sys.exit("Missing stack name")
+  response = client.get_template(
+      StackName=stack_name,
+      TemplateStage='Original'
+  )
+
+  tmp_filename = "/tmp/%s_%s.yml" % (stack_name, time.time())
+  
+  try:
+    f = open(tmp_filename, "w")
+    f.write(response["TemplateBody"])
+    print(f"Downloaded template file {tmp_filename}")
+  finally:
+    if f:
+      f.close()
+
+
+def print_all_params(client):
+  rows = []
+  for stack in get_stacks(client):
+    if stack.get("Parameters") is not None:
+      for param in sorted(stack['Parameters'], key = lambda i: i['ParameterKey']) :
+          rows.append([stack['StackName'], param["ParameterKey"], param["ParameterValue"]])    
+
+  print(tabulate(rows, ["Stack name", "Param Name", "Param Value"], tablefmt="plain"))
 
 
 def main(argv):
@@ -430,6 +462,11 @@ def main(argv):
   parser_clone.add_argument("stack_name", default=None, help="The name of the existing stack")
   parser_clone.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
 
+  parser_download = subparsers.add_parser("download", help="Download template of a given stack")
+  parser_download.add_argument("stack_name", default=None, help="The name of the existing stack")
+
+  parser_print_all = subparsers.add_parser("print-all-params", help="Print all params for all shards in the given region (to use in combination with 'grep')")
+
   subparsers.add_parser("list", help="List CloudFormation stacks")
 
   args = parser.parse_args()
@@ -450,6 +487,10 @@ def main(argv):
     parameters(client, args.stack_name, args.to_file)
   elif args.command_name == "clone":
     clone(client, args.stack_name, args.template_file)
+  elif args.command_name == "download":
+    download(client, args.stack_name)
+  elif args.command_name == "print-all-params":
+    print_all_params(client)
   else:
     print_table(print_stacks(get_stacks(client)))
 
