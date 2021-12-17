@@ -9,7 +9,9 @@ from datetime import date, datetime
 import argparse
 import hashlib
 import json
+import re
 from tabulate import tabulate
+import concurrent.futures as futures
 
 
 REGIONS = {
@@ -91,6 +93,7 @@ def put_template_file(region, stack_name, template_file):
 
 
 def wait_for_status(client, change_set_name, stack_name, status_type = 'Status', polling_interval=3):
+  region = client.meta.region_name
   proceed = True
   response = None
   iteration = 0
@@ -112,14 +115,14 @@ def wait_for_status(client, change_set_name, stack_name, status_type = 'Status',
 
     status = response.get(status_type)
     if status in ('EXECUTE_IN_PROGRESS', 'CREATE_PENDING', 'CREATE_IN_PROGRESS'):
-      print("Current status: %s. Waiting ..." % response.get(status_type))
+      print(f"[Region: {region}, Stack: {stack_name}] Current status: {response.get(status_type)}. Waiting ...")
       time.sleep(polling_interval)
     elif status in ('FAILED', 'EXECUTE_FAILED', 'OBSOLETE'):
       proceed = False
-      print("Status: %s. Reason: %s" % (withcolor(response.get(status_type)), response.get('StatusReason')))
+      print(f"[Region: {region}, Stack: {stack_name}] Status: {withcolor(response.get(status_type))}. Reason: {response.get('StatusReason')}")
       break     
     else:
-      print("Status: %s. Reason: %s" % (withcolor(response.get(status_type)), response.get('StatusReason')))
+      print(f"[Region: {region}, Stack: {stack_name}] Status: {withcolor(response.get(status_type))}. Reason: {response.get('StatusReason')}")
       break
   return proceed
 
@@ -206,8 +209,12 @@ def create_change_set(client, stack_name, template_file, bucket_name, region, pa
       Parameters = build_params(get_stacks_params_by_name(client, stack_name), params, user_provided_params),
       Capabilities = [] if capabilities is None else capabilities
     )
-  print("Created change set: %s" % change_set_name)
-  return change_set_name
+  print(f"[Region: {region}, Stack: {stack_name}] Created change set: {change_set_name}")
+  
+  if wait_for_status(client, change_set_name, stack_name):
+    return change_set_name
+  else:
+    return None  
 
 
 def update_change_set(client, change_set_name, stack_name):
@@ -319,7 +326,7 @@ def print_stacks(rset, short=False):
       record['LastUpdatedTime'].strftime("%d/%m/%Y %H:%M:%S") if record.get('LastUpdatedTime') else 'N/A'
       ])
   rows = sorted(rows, key=lambda p: p[0])
-  rows.insert(0, ['Name', 'Description', 'Status', 'Created', 'Updated'])
+  rows.insert(0, ['Region', 'Name', 'Description', 'Status', 'Created', 'Updated'])
   return rows
 
 
@@ -349,17 +356,92 @@ def upsert_params(params_list, new_params):
         params_list.append({"ParameterKey": k, "ParameterValue": v, "UsePreviousValue": False})
 
 
-def update(client, stack_name, template_file, bucket_name, user_provided_params, region):
+def update(client, stack_name, template_file, bucket_name, user_provided_params, region, apply_immediately=True):
   params, capabilities = validate_template(client, template_file, bucket_name, region)
-  change_set_name = create_change_set(client, stack_name, template_file, bucket_name, region, params, capabilities, user_provided_params)
-  if wait_for_status(client, change_set_name, stack_name):
+  change_set_name = create_change_set(client, stack_name, template_file, bucket_name, region, params, capabilities, user_provided_params) # wait for change set to be ready
+  if apply_immediately:
+    apply_change_set(client, stack_name, change_set_name)
+    return
+  return (client, stack_name, change_set_name)
+  
+
+def apply_change_set(client, stack_name, change_set_name):
+    print(f"Applying change set for stack \"{stack_name}\"")
     print_change_set_params(client, change_set_name, stack_name)
     print_change_set(client, change_set_name, stack_name)
-    if prompt_confirmation("Do you want to update the stack: "):
+    if prompt_confirmation("Do you want to update the stack? ", hard_stop=False):
       client_token = update_change_set(client, change_set_name, stack_name)
       wait_for_stack_status(client, stack_name, client_token)
       return
-  delete_change_set(client, change_set_name, stack_name)
+    delete_change_set(client, change_set_name, stack_name)  
+
+
+def create_bulk_change_set(matching_stacks, template_file, bucket_names, user_provided_params):
+  regional_buckets = dict(map(lambda b: b.split("="), bucket_names.split(",")))
+  aws_regions = {v: k for k, v in REGIONS.items()}
+
+  results = []
+  with futures.ThreadPoolExecutor() as pool:  
+    for stack in matching_stacks:
+      stack_name = stack["StackName"]
+      region = stack["StackId"].split(":")[3]
+      print(f"Creating change set for the following stack \"{stack_name}\" in region \"{region}\" ...")
+      results.append(
+        pool.submit(
+          update, 
+          get_client(region), 
+          stack_name, 
+          template_file, 
+          regional_buckets.get(region) if regional_buckets.get(region, None) else regional_buckets.get(aws_regions.get(region), None), 
+          user_provided_params, 
+          region,
+          apply_immediately=False
+        )
+      )
+
+  i = 0
+  for result in results:
+    change_set_name = result.result()
+    if change_set_name[2] is not None:
+      i += 1
+      apply_change_set(change_set_name[0], change_set_name[1], change_set_name[2])
+  
+  if i == 0:
+    print("Nothing to execute. Aborting script")
+
+
+def bulk_update(stack_name, template_file, bucket_names, user_provided_params, regions):
+  results = []
+  with futures.ThreadPoolExecutor() as pool:  
+    for region in regions:
+      results.append(
+        pool.submit(get_stacks, get_client(REGIONS.get(region)))
+      )
+
+  matching_stacks = []
+  pattern = re.compile(stack_name)
+  for result in results:
+    stacks = result.result()
+    if stacks:
+      for stack in stacks:
+        if pattern.match(stack['StackName']):
+          matching_stacks.append(stack)
+
+  if matching_stacks:
+    print("The following stacks have been found:")
+    print_table(print_stacks(matching_stacks))
+  else:
+    print("No stacks found.")
+    return
+
+  if prompt_confirmation("Do you want to create the changes for the above stacks? "):
+    create_bulk_change_set(matching_stacks, template_file, bucket_names, user_provided_params)
+
+
+def build_change_set(client, stack_name, template_file, bucket_name, user_provided_params, region):
+  params, capabilities = validate_template(client, template_file, bucket_name, region)
+  change_set_name = create_change_set(client, stack_name, template_file, bucket_name, region, params, capabilities, user_provided_params)
+  return params, capabilities, change_set_name
 
 
 def diff(client, stack_name, local_file):
@@ -420,6 +502,8 @@ def download(client, stack_name):
   finally:
     if f:
       f.close()
+  
+  return tmp_filename
 
 
 def print_all_params(client):
@@ -432,12 +516,23 @@ def print_all_params(client):
   print(tabulate(rows, ["Stack name", "Param Name", "Param Value"], tablefmt="plain"))
 
 
+def get_client(region):
+  return boto3.client('cloudformation', region_name=region)  
+
+
+def load_config(filename):
+  with open (filename, "r") as f:
+    data = json.loads(f.read())  
+  return data
+
+
 def main(argv):
   parser = argparse.ArgumentParser(
           description="AWS CloudFormation command-line helper.",
           formatter_class=argparse.ArgumentDefaultsHelpFormatter,
   )
   parser.add_argument("-r", "--region", default="us-east-1", help="AWS region ID", required=False)
+  parser.add_argument("-c", "--config", default=None, help="Configuration file", required=False)
   subparsers = parser.add_subparsers(dest="command_name", help="Available commands")
 
   parser_validate = subparsers.add_parser("validate", help="Validate local template file")
@@ -454,6 +549,12 @@ def main(argv):
   parser_update.add_argument("-p", "--params", default=None, help="Comma separated key value params e.g. Key=Value,Key2=Value2. Those will be added to the existing ones", required=False)
   parser_update.add_argument("-b", "--bucket-name", default=None, help="If bucket name is provided the file will store in S3 (required for large template)")
 
+  parser_bulk_update = subparsers.add_parser("bulk-update", help="Update template")
+  parser_bulk_update.add_argument("stack_name", default=None, help="The name of the existing stack")
+  parser_bulk_update.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
+  parser_bulk_update.add_argument("-p", "--params", default=None, help="Comma separated key value params e.g. Key=Value,Key2=Value2. Those will be added to the existing ones", required=False)
+  parser_bulk_update.add_argument("-b", "--bucket-names", default=None, help="Comma separated key value params of regional S3 buckets e.g. us-east=cf-bucket-us-east,singapore=cf-bucket-singapore.", required=True)
+
   parser_getparams = subparsers.add_parser("params", help="List stack parameters")
   parser_getparams.add_argument("stack_name", default=None, help="The name of the existing stack")
   parser_getparams.add_argument("-f", "--to-file", default=None, help="Print params list into a given filename (format used by aws cli)", required=False)
@@ -465,35 +566,48 @@ def main(argv):
   parser_download = subparsers.add_parser("download", help="Download template of a given stack")
   parser_download.add_argument("stack_name", default=None, help="The name of the existing stack")
 
-  parser_print_all = subparsers.add_parser("print-all-params", help="Print all params for all shards in the given region (to use in combination with 'grep')")
+  parser_print_all = subparsers.add_parser("print-all-params", help="Print all params for all stacks in the given region (to use in combination with 'grep')")
 
   subparsers.add_parser("list", help="List CloudFormation stacks")
 
   args = parser.parse_args()
-  region = REGIONS.get(args.region, args.region)
 
-  print("Region: " + region)
-  client = boto3.client('cloudformation', region_name=region)
-
-  if args.command_name == "validate":
-    params, capabilities = validate_template(client, args.template_file, args.bucket_name, region)
-    print_template(params, capabilities)
-  elif args.command_name == "update":
-    update(client, args.stack_name, args.template_file, args.bucket_name, args.params, region)
-    print("Goodbye")
-  elif args.command_name == "diff":
-    diff(client, args.stack_name, args.template_file)
-  elif args.command_name == "params":
-    parameters(client, args.stack_name, args.to_file)
-  elif args.command_name == "clone":
-    clone(client, args.stack_name, args.template_file)
-  elif args.command_name == "download":
-    download(client, args.stack_name)
-  elif args.command_name == "print-all-params":
-    print_all_params(client)
+  if args.region == "all":
+    regions = REGIONS.keys()
   else:
-    print_table(print_stacks(get_stacks(client)))
+    regions = [args.region]
 
+  if args.config is not None:
+    CONFIG = load_config(args.config)
+    print(CONFIG)
+
+  if args.command_name == "bulk-update":
+    bulk_update(args.stack_name, args.template_file, args.bucket_names, args.params, regions)
+  else:
+    for region_name in regions:
+      region = REGIONS.get(region_name, region_name)
+
+      print("Region: " + region)
+      client = get_client(region)
+
+      if args.command_name == "validate":
+        params, capabilities = validate_template(client, args.template_file, args.bucket_name, region)
+        print_template(params, capabilities)
+      elif args.command_name == "update":
+        update(client, args.stack_name, args.template_file, args.bucket_name, args.params, region)
+        print("Goodbye")
+      elif args.command_name == "diff":
+        diff(client, args.stack_name, args.template_file)
+      elif args.command_name == "params":
+        parameters(client, args.stack_name, args.to_file)
+      elif args.command_name == "clone":
+        clone(client, args.stack_name, args.template_file)
+      elif args.command_name == "download":
+        download(client, args.stack_name)
+      elif args.command_name == "print-all-params":
+        print_all_params(client)
+      else:
+        print_table(print_stacks(get_stacks(client)))
 
 if __name__ == "__main__":
   main(sys.argv[1:])
