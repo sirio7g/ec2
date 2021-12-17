@@ -1,0 +1,94 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import getopt
+from sys import stderr
+import boto3
+
+
+REGIONS = {
+  "tokyo": "ap-northeast-1",
+  "mumbai": "ap-south-1",
+  "us-east": "us-east-1",
+  "dublin": "eu-west-1",
+  "singapore": "ap-southeast-1",
+  "sydney": "ap-southeast-2",  
+  "canada": "ca-central-1",
+  "oregon": "us-west-2",
+  "frankfurt": "eu-central-1",  
+  "california": "us-west-1",
+  "brazil": "sa-east-1",
+  "south-africa": "af-south-1",
+  "ohio": "us-east-2"
+}
+
+
+def print_bool(bool_value):
+  return 'Yes' if bool_value == True else 'No'
+
+
+def get_amis(client):
+  images = client.describe_images(Owners=['self'])
+  return images.get("Images")
+
+
+def get_tag(tags, tag_name, default):
+  if tags is not None:
+    for tag in tags:
+      if tag['Key'] == tag_name:
+        return tag['Value']
+  return default
+
+
+def print_table(rows):
+  row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
+  for row in rows:
+    print(row_format.format(*row))
+
+
+def print_amis(volumes_list, short=False):
+  rows = []
+
+  for instance in volumes_list:    
+    rows.append([
+        instance.get('ImageId'), 
+        instance.get('Name'),
+        instance.get('Architecture'),
+        instance.get('PlatformDetails'),
+        instance.get('State'),
+        instance.get('CreationDate'),
+        ", ".join(list(map(lambda t: f"{t['Key']}: {t['Value']}", instance.get('Tags', []))))
+    ])
+
+  rows = sorted(rows, key=lambda p: p[5], reverse=True)
+
+  if short is False:
+    rows.insert(0, ['AMI ID', 'Name', 'Arch', 'Platform', 'State', 'Date', 'Tags'])
+
+  return rows
+
+
+# parse given parameters
+def main(argv):
+    region = 'us-east-1'
+    short = False
+    
+    try:
+      opts, args = getopt.getopt(argv, "r:s")
+
+      for opt, arg in opts:
+          if opt in('-r'):
+            region = REGIONS.get(arg, "us-east-1")
+    except getopt.GetoptError as err:
+      print(err, file=sys.stderr)
+      sys.exit(2)
+
+    print("Region: " + region)
+    client = boto3.client('ec2', region_name=region)
+    print_table(print_amis(get_amis(client)))
+
+
+# run program
+if __name__ == "__main__":
+    main(sys.argv[1:])

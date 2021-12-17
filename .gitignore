@@ -1,0 +1,15 @@
+*.pyc
+.DS_Store
+.idea
+*.iml
+*.ovpn
+
+/v2_deploy/.venv
+/v2_deploy/bin
+/v2_deploy/include
+/v2_deploy/lib
+/v2_deploy/share
+.vscode/
+.venv
+.bundle
+vendor

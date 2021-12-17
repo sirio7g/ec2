@@ -81,7 +81,7 @@ def print_instances(instances_list, short=False, summary=False):
         print_vpc_sgs(instance['VpcSecurityGroups']),
         print_bool(instance['AutoMinorVersionUpgrade']),
         'Public' if instance['PubliclyAccessible'] == True else 'Private',      
-        '%s:%s' % (instance['Endpoint']['Address'], instance['Endpoint']['Port']),
+        '%s:%s' % (instance['Endpoint']['Address'], instance['Endpoint']['Port']) if instance['Endpoint'] else ("", ""),
         str(instance['BackupRetentionPeriod'])
         ])
     else:
