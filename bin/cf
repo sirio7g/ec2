@@ -250,6 +250,32 @@ def print_change_set(client, change_set_name, stack_name):
       % (withcolor(resource.get('Action')), withcolor(resource.get('Replacement')), resource.get('ResourceType'), resource.get('LogicalResourceId'), resource.get('PhysicalResourceId')))
 
 
+def bulk_change_set_analysis(change_sets):
+  fingerprint = None
+  for change_set in change_sets:
+    client = change_set[0]
+    response = client.describe_change_set(
+        ChangeSetName=change_set[2],
+        StackName=change_set[1]
+    )
+
+    hashes = []
+    rows = []
+    for change in response['Changes']:
+      resource = change['ResourceChange']
+      hash_str = f"{resource.get('Action')}:{resource.get('Replacement')}:{resource.get('ResourceType')}:{resource.get('LogicalResourceId')}"
+      hashes.append(hashlib.sha1(bytes(hash_str, encoding='utf8')).hexdigest())
+    
+    if fingerprint == None:
+      fingerprint = "::".join(hashes)
+    else:
+      rows.append([change_set[1], change_set[2], '::'.join(hashes)])
+      if fingerprint != "::".join(hashes):
+        print(tabulate(rows, ["Stack", "Change set", "Fingerprint"], tablefmt="plain"))
+        return False
+  return True
+
+
 def print_status(status, reason):
   if reason == None:
     return status
@@ -365,11 +391,11 @@ def update(client, stack_name, template_file, bucket_name, user_provided_params,
   return (client, stack_name, change_set_name)
   
 
-def apply_change_set(client, stack_name, change_set_name):
+def apply_change_set(client, stack_name, change_set_name, assume_yes=False):
     print(f"Applying change set for stack \"{stack_name}\"")
     print_change_set_params(client, change_set_name, stack_name)
     print_change_set(client, change_set_name, stack_name)
-    if prompt_confirmation("Do you want to update the stack? ", hard_stop=False):
+    if assume_yes or prompt_confirmation("Do you want to update the stack? ", hard_stop=False):
       client_token = update_change_set(client, change_set_name, stack_name)
       wait_for_stack_status(client, stack_name, client_token)
       return
@@ -399,15 +425,31 @@ def create_bulk_change_set(matching_stacks, template_file, bucket_names, user_pr
         )
       )
 
+  assume_yes=False
+  if results:
+    print("Running changes sets analysis ...\n")
+    if bulk_change_set_analysis([r.result() for r in results]):
+      print(bcolors.OKGREEN + "Change sets are all equal. Safe to check only one." + bcolors.ENDC)
+      if prompt_confirmation("Do you want to apply change sets automatically ? Make sure you know what you are doing.", hard_stop=False):
+        assume_yes=True
+    else:
+      print(bcolors.WARNING + "Change sets are not all equal. Better to check them carefully" + bcolors.ENDC)
+
   i = 0
   for result in results:
     change_set_name = result.result()
     if change_set_name[2] is not None:
       i += 1
-      apply_change_set(change_set_name[0], change_set_name[1], change_set_name[2])
-  
+      apply_change_set(
+        change_set_name[0], 
+        change_set_name[1], 
+        change_set_name[2], 
+        False if i == 1 else assume_yes
+      )
+
   if i == 0:
     print("Nothing to execute. Aborting script")
+    return
 
 
 def bulk_update(stack_name, template_file, bucket_names, user_provided_params, regions):
@@ -450,8 +492,7 @@ def diff(client, stack_name, local_file):
       TemplateStage='Original'
   )
 
-  tmp_filename = "/tmp/remote_%s_%s" % (stack_name, time.time())
-  
+  tmp_filename = "/tmp/remote_%s_%s" % (stack_name, time.time())  
   try:
     f = open(tmp_filename, "w")
     f.write(response["TemplateBody"])
@@ -494,7 +535,6 @@ def download(client, stack_name):
   )
 
   tmp_filename = "/tmp/%s_%s.yml" % (stack_name, time.time())
-  
   try:
     f = open(tmp_filename, "w")
     f.write(response["TemplateBody"])
