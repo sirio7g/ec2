@@ -17,7 +17,8 @@ REGIONS = {
   "oregon": "us-west-2",
   "frankfurt": "eu-central-1",  
   "california": "us-west-1",
-  "brazil": "sa-east-1"
+  "brazil": "sa-east-1",
+  "ohio": "us-east-2"
 }
 
 def print_bool(bool_value):

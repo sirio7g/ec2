@@ -188,7 +188,7 @@ def build_params(existing_params, new_params, user_provided_params):
   return params_list
 
 
-def create_change_set(client, stack_name, template_file, bucket_name, region, params, capabilities, user_provided_params):
+def create_change_set(client, stack_name, template_file, bucket_name, region, params, capabilities, user_provided_params, polling_interval=3):
   change_set_name = "%s-%s" % (stack_name, int(time.time()))
   if bucket_name is not None:
     obj_name = upload_file_to_s3(region, bucket_name, template_file)
@@ -211,7 +211,7 @@ def create_change_set(client, stack_name, template_file, bucket_name, region, pa
     )
   print(f"[Region: {region}, Stack: {stack_name}] Created change set: {change_set_name}")
   
-  if wait_for_status(client, change_set_name, stack_name):
+  if wait_for_status(client, change_set_name, stack_name, polling_interval=polling_interval):
     return change_set_name
   else:
     return None  
@@ -407,7 +407,7 @@ def create_bulk_change_set(matching_stacks, template_file, bucket_names, user_pr
   aws_regions = {v: k for k, v in REGIONS.items()}
 
   results = []
-  with futures.ThreadPoolExecutor() as pool:  
+  with futures.ThreadPoolExecutor(max_workers=5) as pool:  
     for stack in matching_stacks:
       stack_name = stack["StackName"]
       region = stack["StackId"].split(":")[3]
@@ -440,6 +440,7 @@ def create_bulk_change_set(matching_stacks, template_file, bucket_names, user_pr
     change_set_name = result.result()
     if change_set_name[2] is not None:
       i += 1
+      print(f"Progress: {i} out of {len(results)}")
       apply_change_set(
         change_set_name[0], 
         change_set_name[1], 
@@ -452,7 +453,7 @@ def create_bulk_change_set(matching_stacks, template_file, bucket_names, user_pr
     return
 
 
-def bulk_update(stack_name, template_file, bucket_names, user_provided_params, regions):
+def bulk_update(stack_name, template_file, bucket_names, user_provided_params, regions, exclude):
   results = []
   with futures.ThreadPoolExecutor() as pool:  
     for region in regions:
@@ -461,13 +462,22 @@ def bulk_update(stack_name, template_file, bucket_names, user_provided_params, r
       )
 
   matching_stacks = []
+
   pattern = re.compile(stack_name)
+  exclude_pattern = None
+  if exclude:
+    exclude_pattern = re.compile(exclude)
+
   for result in results:
     stacks = result.result()
     if stacks:
       for stack in stacks:
         if pattern.match(stack['StackName']):
-          matching_stacks.append(stack)
+          if exclude:
+            if not exclude_pattern.match(stack['StackName']):
+              matching_stacks.append(stack)
+          else:
+            matching_stacks.append(stack)
 
   if matching_stacks:
     print("The following stacks have been found:")
@@ -594,6 +604,7 @@ def main(argv):
   parser_bulk_update.add_argument("template_file", default=None, help="Full path of the local CF's template file to compare")
   parser_bulk_update.add_argument("-p", "--params", default=None, help="Comma separated key value params e.g. Key=Value,Key2=Value2. Those will be added to the existing ones", required=False)
   parser_bulk_update.add_argument("-b", "--bucket-names", default=None, help="Comma separated key value params of regional S3 buckets e.g. us-east=cf-bucket-us-east,singapore=cf-bucket-singapore.", required=True)
+  parser_bulk_update.add_argument("-e", "--exclude", default=None, help="Exclude stacks which name matches the given regular expression", required=False)
 
   parser_getparams = subparsers.add_parser("params", help="List stack parameters")
   parser_getparams.add_argument("stack_name", default=None, help="The name of the existing stack")
@@ -622,7 +633,7 @@ def main(argv):
     print(CONFIG)
 
   if args.command_name == "bulk-update":
-    bulk_update(args.stack_name, args.template_file, args.bucket_names, args.params, regions)
+    bulk_update(args.stack_name, args.template_file, args.bucket_names, args.params, regions, args.exclude)
   else:
     for region_name in regions:
       region = REGIONS.get(region_name, region_name)
