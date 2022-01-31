@@ -109,13 +109,13 @@ then
 fi
 
 # Get hostname
-hosts=`$EC2_SCRIPT_HOME/bin/ec2-list --region $region $tags $filter`
-name="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $1 }'`"
+hosts=`$EC2_SCRIPT_HOME/bin/ec2-list --with-region --region $region $tags $filter`
+name="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $2 }'`"
 if [ $usePrivateIp == true ]
 then 
-  hostname="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $4 }'`"
+  hostname="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $5 }'`"
 else
-  hostname="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $2 }'`"
+  hostname="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $3 }'`"
 fi
 
 index=0
@@ -124,7 +124,8 @@ for i in $name
 do
   index=`expr $index + 1`
   address=`echo "$hostname" | head -$index | tail -1`
-  echo "\033[33m$index. \033[32;1m$i\033[0m ($address)"
+  aws_region=`echo "$hosts" | head -$index | tail -1 | awk '{print $1}'`
+  echo "\033[33m$index. \033[0m$aws_region ∙ \033[32;1m$i\033[0m ($address)"
 done
 unset IFS
 

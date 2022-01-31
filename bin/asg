@@ -44,10 +44,10 @@ def get_current_instances(instances):
     return '0'
 
 
-def get_instances(client):
+def get_asgs(client, asg_name):
   asgs = []
   paginator = client.get_paginator('describe_auto_scaling_groups')
-  page_iterator = paginator.paginate()
+  page_iterator = paginator.paginate() if asg_name is None else paginator.paginate(AutoScalingGroupNames=[asg_name])
   for page in page_iterator:
     asgs = asgs + page['AutoScalingGroups']
 
@@ -61,7 +61,40 @@ def print_table(rows):
     print(row_format.format(*row))
 
 
-def print_instances(instances_list, short=False):
+def print_asg_detail(asgs):
+  asg = asgs.pop()
+
+  rows = [
+    ["Name", f"{asg['AutoScalingGroupName']}"],
+    ["Current size", f"{get_current_instances(asg.get('Instances', []))}"],  
+    ["Min size", f"{asg.get('MinSize')}"],  
+    ["Desired capacity", f"{asg.get('DesiredCapacity')}"],    
+    ["Max size", f"{asg.get('MaxSize')}"],      
+    ["Cooldown period", f"{asg.get('DefaultCooldown')}"],      
+    ["Healthcheck type", f"{asg.get('HealthCheckType')}"],        
+    ["AZs", f"{', '.join(asg.get('AvailabilityZones'))}"],
+    ["ELBs", f"{', '.join(asg.get('LoadBalancerNames', ['n/a']))}"],
+    ["Target groups", f"{', '.join(asg.get('TargetGroupARNs', ['n/a']))}"],
+    ["Suspended processes", f"{get_supended_process(asg.get('SuspendedProcesses', ['n/a']))}"]
+  ]
+  rows.insert(0, ["Property", "Value"])
+  print_table(rows)
+
+
+  print("\nInstances:")
+  instances = []
+  for instance in asg.get('Instances'):
+    instances.append([
+      instance['InstanceId'],
+      instance['AvailabilityZone'],
+      instance['HealthStatus'],
+      instance['LifecycleState']
+    ])
+  instances.insert(0, ["Instance ID", "AZs", "Health Status", "Lifecycle Status"])
+  print_table(instances)
+
+
+def print_asgs(instances_list, short=False):
   rows = []
 
   for instance in instances_list:
@@ -90,22 +123,33 @@ def print_instances(instances_list, short=False):
 def main(argv):
     region = 'us-east-1'
     short = False
+    asg_name = None
     
     try:
-      opts, args = getopt.getopt(argv, "r:s")
+      opts, args = getopt.getopt(argv, "r:sa:h")
 
       for opt, arg in opts:
-          if opt in('-r'):
-            region = REGIONS.get(arg, "us-east-1")
-          if opt in ('-s'):
-            short = True
+        if opt in('-r'):
+          region = REGIONS.get(arg, "us-east-1")
+        if opt in ('-s'):
+          short = True
+        if opt in ('-a'):
+          asg_name = arg
+        if opt in ('-h', '--help'):
+          print(f"Usage: asg [-r region] [-a autoscaling group name]")
+          sys.exit(0)
     except getopt.GetoptError as err:
       print(err, file=sys.stderr)
       sys.exit(2)
 
     print("Region: " + region)
     client = boto3.client('autoscaling', region_name=region)
-    print_table(print_instances(get_instances(client), short=short))
+
+    if asg_name is None:
+      print_table(print_asgs(get_asgs(client, asg_name), short=short))
+    else:
+      print_asg_detail(get_asgs(client, asg_name))
+      
 
 
 # run program

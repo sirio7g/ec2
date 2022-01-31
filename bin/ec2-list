@@ -22,7 +22,9 @@ REGIONS = {
   "oregon": "us-west-2",
   "frankfurt": "eu-central-1",  
   "california": "us-west-1",
-  "brazil": "sa-east-1"
+  "brazil": "sa-east-1",
+  "south-africa": "af-south-1",
+  "ohio": "us-east-2"
 }
 
 
@@ -88,7 +90,7 @@ def print_table(rows):
     print(row_format.format(*row))
 
 
-def print_instances(instances_list, short=False, header=False, tags=[], filters=None):
+def print_instances(instances_list, short=False, header=False, tags=[], filters=None, with_region=True):
   rows = []
   
   for instance in instances_list:
@@ -116,15 +118,17 @@ def print_instances(instances_list, short=False, header=False, tags=[], filters=
           public_dns = public_ip
 
         if short:
-          rows.append([
+          row = [
+            str(instance['Placement']['AvailabilityZone'])[:-1],
             instance_name, 
             instance.get('InstanceId'), 
             instance.get('PrivateIpAddress'), 
             public_ip, 
             instance.get('InstanceType'), 
-            str(instance['Placement']['AvailabilityZone'])])
+            str(instance['Placement']['AvailabilityZone'])]
         else:
-          rows.append([
+          row = [
+            str(instance['Placement']['AvailabilityZone'])[:-1],
             instance_name, 
             public_dns, 
             instance.get('InstanceId'), 
@@ -136,49 +140,50 @@ def print_instances(instances_list, short=False, header=False, tags=[], filters=
             spot_instance, 
             print_sg(instance['SecurityGroups']), 
             get_uptime(instance.get('LaunchTime')), 
-            service_name])
-          
-  rows = sorted(rows, key=lambda p: p[0])
+            service_name]
+
+        if with_region:
+          rows.append(row)
+        else:
+          rows.append(row[1:])
+
+  rows = sorted(rows, key=lambda p: (p[0], p[1]))
 
   if header is True:
     if short is True:
-      rows.insert(0, ['Name','Id', 'Private IPv4','Public IPv4','Type','Az'])
+      head = ['Name', 'Id', 'Private IPv4','Public IPv4','Type','Az']
+      if with_region:
+        head.insert(0, "Region")
+      rows.insert(0, head)
     else:      
-      rows.insert(0, ['Name','Hostname','Id','Private IPv4','Public IPv4','Type','Az','AMI','Price','SG(s)', 'Uptime', 'Tags (' + ','.join(tags) + ')'])
+      head = ['Name','Hostname','Id','Private IPv4','Public IPv4','Type','Az','AMI','Price','SG(s)', 'Uptime', 'Tags (' + ','.join(tags) + ')']
+      if with_region:
+        head.insert(0, "Region")
+      rows.insert(0, head)
 
   return rows
 
 
 def main(argv):
-    region = 'us-east-1'
+    region = None
     short = False
     header = False
+    with_region = False
     tags=['service', 'Product', 'Scope']
     filters=None
     
     try:
-      opts, args = getopt.getopt(argv, "r:Ht:f:", ["region=", "with-header", "short", 'tags=', 'filter='])
+      opts, args = getopt.getopt(argv, "r:HRst:f:", ["region=", "with-header", "with-region", "short", 'tags=', 'filter='])
 
       for opt, arg in opts:
           if opt in ('-r', '--region'):
-            if arg == 'tokyo':
-              region = 'ap-northeast-1'
-            elif arg == 'mumbai':
-              region = 'ap-douth-1'
-            elif arg == 'us-east':
-              region = 'us-east-1'
-            elif arg == 'dublin':
-              region = 'eu-west-1'
-            elif arg == 'singapore':
-              region = 'ap-southeast-1'
-            elif arg == 'canada':
-              region = 'ca-central-1'
-            else:
-              region = arg
+            region = arg
           if opt in ('-s', '--short'):
             short = True
           if opt in ('-H', '--with-header'):
             header = True
+          if opt in ('-R', '--with-region'):
+            with_region = True
           if opt in ('-t', '--tags'):
             tags = arg.split(',')
           if opt in ('-f', '--filter'):
@@ -187,9 +192,22 @@ def main(argv):
       print(err, file=sys.stderr)
       sys.exit(2)
 
-    client = boto3.client('ec2', region_name=region)
-    print_table(print_instances(get_instances(client, filters), short=short, header=header, tags=tags, filters=filters))
+    instances = []
+    if region is None:
+      instances = get_instances(boto3.client('ec2', region_name="us-east-1"), filters)
+    else:
+      if region == "all":
+        with_region = True
+        for alias, aws_region in REGIONS.items():
+          instances += get_instances(boto3.client('ec2', region_name=aws_region), filters)
+      elif ',' in region:
+        with_region = True
+        for aws_region in region.split(","):
+          instances += get_instances(boto3.client('ec2', region_name=REGIONS.get(aws_region, aws_region)), filters)
+      else:
+        instances = get_instances(boto3.client('ec2', region_name=REGIONS.get(region, region)), filters)
 
+    print_table(print_instances(instances, short=short, header=header, tags=tags, filters=filters, with_region=with_region))
 
 if __name__ == "__main__":
     main(sys.argv[1:])

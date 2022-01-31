@@ -340,16 +340,27 @@ def print_table(rows):
     print(row_format.format(*row))
 
 
-def print_stacks(rset, short=False):
+def print_stacks(rset, short=False, filter=None):
   rows = []
   
+  if filter is not None:
+    pattern = re.compile(filter)
+  else:
+    pattern = None
+
   for record in rset:
-    rows.append([
-      record['StackName'], 
-      record['Description'].replace("\n", " ") if record.get('Description') else 'N/A',
-      print_status(record.get('StackStatus'), record.get('StackStatusReason')),
-      record['CreationTime'].strftime("%d/%m/%Y %H:%M:%S"),
-      record['LastUpdatedTime'].strftime("%d/%m/%Y %H:%M:%S") if record.get('LastUpdatedTime') else 'N/A'
+    to_include = True
+    if pattern and not pattern.match(record['StackName']):
+      to_include = False
+
+    if to_include:
+      rows.append([
+        record["StackId"].split(":")[3],
+        record['StackName'], 
+        record['Description'].replace("\n", " ") if record.get('Description') else 'N/A',
+        print_status(record.get('StackStatus'), record.get('StackStatusReason')),
+        record['CreationTime'].strftime("%d/%m/%Y %H:%M:%S"),
+        record['LastUpdatedTime'].strftime("%d/%m/%Y %H:%M:%S") if record.get('LastUpdatedTime') else 'N/A'
       ])
   rows = sorted(rows, key=lambda p: p[0])
   rows.insert(0, ['Region', 'Name', 'Description', 'Status', 'Created', 'Updated'])
@@ -617,9 +628,10 @@ def main(argv):
   parser_download = subparsers.add_parser("download", help="Download template of a given stack")
   parser_download.add_argument("stack_name", default=None, help="The name of the existing stack")
 
-  parser_print_all = subparsers.add_parser("print-all-params", help="Print all params for all stacks in the given region (to use in combination with 'grep')")
+  subparsers.add_parser("print-all-params", help="Print all params for all stacks in the given region (to use in combination with 'grep')")
 
-  subparsers.add_parser("list", help="List CloudFormation stacks")
+  list_all = subparsers.add_parser("list", help="List CloudFormation stacks")
+  list_all.add_argument("-i", "--include", default=None, help="Include stacks which name matches the given regular expression", required=False)
 
   args = parser.parse_args()
 
@@ -658,7 +670,7 @@ def main(argv):
       elif args.command_name == "print-all-params":
         print_all_params(client)
       else:
-        print_table(print_stacks(get_stacks(client)))
+        print_table(print_stacks(get_stacks(client), filter=args.include))
 
 if __name__ == "__main__":
   main(sys.argv[1:])
