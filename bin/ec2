@@ -11,7 +11,7 @@ user=${DEFAULT_USER}
 filter=""
 
 # Extract options
-while getopts "u:k:c:r:t:f:ixhps" opt; do
+while getopts "u:k:c:r:t:f:e:ixhps" opt; do
   case $opt in
     u)
       user=$OPTARG
@@ -44,11 +44,15 @@ while getopts "u:k:c:r:t:f:ixhps" opt; do
     f)
       filter=" -f ${OPTARG}"
       ;;
+    e)
+      environment="--profile ${OPTARG}"
+      ;;
     h)
       echo "\nDisplay and connect easely to your EC2 instance(s)"
       echo "Usage: $0 [-u user] [-x] [-c \"command\"] [-r eu|us|us-west-1|region]"
       echo "\nArguments:"
       echo "\t-r region"
+      echo "\t-e AWS profile name"
       echo "\t-i display instances' details and exit"
       echo "\t-p use instance's private IPv4"
       echo "\t-u user"
@@ -104,12 +108,12 @@ echo "\033[33mRegion: $region\033[0m"
 # Print info and quit
 if [ "$infoOpt" = "Y" ]
 then
-  ${EC2_SCRIPT_HOME}/bin/ec2-list ${SHORT} --with-header --region $region $tags $filter
+  ${EC2_SCRIPT_HOME}/bin/ec2-list ${SHORT} --with-header $environment --region $region $tags $filter
   exit 0
 fi
 
 # Get hostname
-hosts=`$EC2_SCRIPT_HOME/bin/ec2-list --with-region --region $region $tags $filter`
+hosts=`$EC2_SCRIPT_HOME/bin/ec2-list --with-region $environment --region $region $tags $filter`
 name="`echo "$hosts" | awk 'BEGIN { FS = " " } ; { print $2 }'`"
 if [ $usePrivateIp == true ]
 then 

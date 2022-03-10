@@ -173,7 +173,7 @@ def main(argv):
     filters=None
     
     try:
-      opts, args = getopt.getopt(argv, "r:HRst:f:", ["region=", "with-header", "with-region", "short", 'tags=', 'filter='])
+      opts, args = getopt.getopt(argv, "r:HRst:f:p:", ["region=", "with-header", "with-region", "short", 'tags=', 'filter=', 'profile='])
 
       for opt, arg in opts:
           if opt in ('-r', '--region'):
@@ -188,6 +188,8 @@ def main(argv):
             tags = arg.split(',')
           if opt in ('-f', '--filter'):
             filters = arg
+          if opt in ('-p', '--profile'):
+            boto3.setup_default_session(profile_name=arg)
     except getopt.GetoptError as err:
       print(err, file=sys.stderr)
       sys.exit(2)

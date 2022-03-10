@@ -638,7 +638,10 @@ def main(argv):
   if args.region == "all":
     regions = REGIONS.keys()
   else:
-    regions = [args.region]
+    if "," in args.region:
+      regions = args.region.split(",")
+    else:
+      regions = [args.region]
 
   if args.config is not None:
     CONFIG = load_config(args.config)
