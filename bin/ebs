@@ -18,7 +18,8 @@ REGIONS = {
   "oregon": "us-west-2",
   "frankfurt": "eu-central-1",  
   "california": "us-west-1",
-  "brazil": "sa-east-1"
+  "brazil": "sa-east-1",
+  "jakarta": "ap-southeast-3"  
 }
 
 

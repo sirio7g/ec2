@@ -27,7 +27,15 @@ REGIONS = {
   "california": "us-west-1",
   "brazil": "sa-east-1",
   "south-africa": "af-south-1",
-  "ohio": "us-east-2"  
+  "ohio": "us-east-2",
+  "jakarta": "ap-southeast-3" 
+#  "aws-tok1": "ap-northeast-1",
+#  "aws-mum1": "ap-south-1",
+#  "aws-sin1": "ap-southeast-1",
+#  "aws-syd1": "ap-southeast-2",  
+#  "aws-fra1": "eu-central-1",  
+#  "aws-sao1": "sa-east-1",
+#  "aws-cap1": "af-south-1"
 }
 
 class bcolors:
@@ -254,25 +262,28 @@ def bulk_change_set_analysis(change_sets):
   fingerprint = None
   for change_set in change_sets:
     client = change_set[0]
-    response = client.describe_change_set(
-        ChangeSetName=change_set[2],
-        StackName=change_set[1]
-    )
+    if change_set[2] is not None:            
+      response = client.describe_change_set(
+          ChangeSetName=change_set[2],
+          StackName=change_set[1]
+      )
 
-    hashes = []
-    rows = []
-    for change in response['Changes']:
-      resource = change['ResourceChange']
-      hash_str = f"{resource.get('Action')}:{resource.get('Replacement')}:{resource.get('ResourceType')}:{resource.get('LogicalResourceId')}"
-      hashes.append(hashlib.sha1(bytes(hash_str, encoding='utf8')).hexdigest())
-    
-    if fingerprint == None:
-      fingerprint = "::".join(hashes)
+      hashes = []
+      rows = []
+      for change in response['Changes']:
+        resource = change['ResourceChange']
+        hash_str = f"{resource.get('Action')}:{resource.get('Replacement')}:{resource.get('ResourceType')}:{resource.get('LogicalResourceId')}"
+        hashes.append(hashlib.sha1(bytes(hash_str, encoding='utf8')).hexdigest())
+      
+      if fingerprint == None:
+        fingerprint = "::".join(hashes)
+      else:
+        rows.append([change_set[1], change_set[2], '::'.join(hashes)])
+        if fingerprint != "::".join(hashes):
+          print(tabulate(rows, ["Stack", "Change set", "Fingerprint"], tablefmt="plain"))
+          return False
     else:
-      rows.append([change_set[1], change_set[2], '::'.join(hashes)])
-      if fingerprint != "::".join(hashes):
-        print(tabulate(rows, ["Stack", "Change set", "Fingerprint"], tablefmt="plain"))
-        return False
+      print(f"No changes detected for the stack {change_set[1]}")
   return True
 
 
@@ -334,6 +345,14 @@ def get_stacks_params_by_name(client, stack_name):
     return stack['Parameters']
 
 
+def ellipsis(string, max_size=50):
+  if string is not None:
+    msg = string.rstrip()
+    if len(msg) > max_size:
+      return "%s..." % msg[0:max_size-3]
+  return string
+
+
 def print_table(rows):
   row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
   for row in rows:
@@ -357,7 +376,7 @@ def print_stacks(rset, short=False, filter=None):
       rows.append([
         record["StackId"].split(":")[3],
         record['StackName'], 
-        record['Description'].replace("\n", " ") if record.get('Description') else 'N/A',
+        ellipsis(record['Description'].replace("\n", " ")) if record.get('Description') else 'N/A',
         print_status(record.get('StackStatus'), record.get('StackStatusReason')),
         record['CreationTime'].strftime("%d/%m/%Y %H:%M:%S"),
         record['LastUpdatedTime'].strftime("%d/%m/%Y %H:%M:%S") if record.get('LastUpdatedTime') else 'N/A'
@@ -524,6 +543,10 @@ def diff(client, stack_name, local_file):
   os.system("vimdiff -RZ %s %s" % (tmp_filename, local_file))
 
 
+def vi(client, stack_name):
+  os.system("vim -R %s" % (download(client, stack_name)))  
+
+
 def parameters(client, stack_name, as_file=None):
   rows = [["Key", "Value"]]    
   for param in sorted(get_stacks_params_by_name(client, stack_name), key = lambda i: i['ParameterKey']) :
@@ -628,6 +651,9 @@ def main(argv):
   parser_download = subparsers.add_parser("download", help="Download template of a given stack")
   parser_download.add_argument("stack_name", default=None, help="The name of the existing stack")
 
+  parser_vi = subparsers.add_parser("vi", help="Open the downloaded template by read-only vim")
+  parser_vi.add_argument("stack_name", default=None, help="The name of the existing stack")
+
   subparsers.add_parser("print-all-params", help="Print all params for all stacks in the given region (to use in combination with 'grep')")
 
   list_all = subparsers.add_parser("list", help="List CloudFormation stacks")
@@ -670,6 +696,8 @@ def main(argv):
         clone(client, args.stack_name, args.template_file)
       elif args.command_name == "download":
         download(client, args.stack_name)
+      elif args.command_name == "vi":
+        vi(client, args.stack_name)
       elif args.command_name == "print-all-params":
         print_all_params(client)
       else:

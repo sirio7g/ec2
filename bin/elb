@@ -1,0 +1,122 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import getopt
+from sys import stderr
+import boto3
+
+
+REGIONS = {
+  "tokyo": "ap-northeast-1",
+  "mumbai": "ap-south-1",
+  "us-east": "us-east-1",
+  "dublin": "eu-west-1",
+  "singapore": "ap-southeast-1",
+  "sydney": "ap-southeast-2",  
+  "canada": "ca-central-1",
+  "oregon": "us-west-2",
+  "frankfurt": "eu-central-1",  
+  "california": "us-west-1",
+  "brazil": "sa-east-1",
+  "ohio": "us-east-2",
+  "south-africa": "af-south-1",
+  "jakarta": "ap-southeast-3"
+}
+
+
+def print_bool(bool_value):
+  return 'Yes' if bool_value == True else 'No'
+
+
+def get_listeners(listeners):
+  ports = []  
+  for listener in listeners:
+    l = listener.get('Listener')
+    ports.append(f"{l['Protocol']}:{l['LoadBalancerPort']}->{l['InstanceProtocol']}:{l['InstancePort']}")
+  return ', '.join(ports)
+
+
+def get_elbs(client):
+  elbs = []
+  paginator = client.get_paginator('describe_load_balancers')
+  page_iterator = paginator.paginate()
+  for page in page_iterator:
+    elbs = elbs + page['LoadBalancerDescriptions']
+  
+  return elbs
+
+
+def get_albs(client):
+  elbs = []
+  paginator = client.get_paginator('describe_load_balancers')
+  page_iterator = paginator.paginate()
+  for page in page_iterator:
+    elbs = elbs + page['LoadBalancers']
+  
+  return elbs
+
+
+def print_table(rows):
+  row_format = ''.join(["{:<%s}" % (l + 2) for l in [max([len(r) for r in c]) for c in zip(*rows)]])
+  for row in rows:
+    print(row_format.format(*row))
+
+
+def print_instances(elbs, albs):
+  rows = []
+  
+  for instance in elbs:
+    rows.append([
+      'ELB-classic',
+      instance['LoadBalancerName'], 
+      instance['DNSName'],
+      instance['Scheme'],
+      ', '.join(instance['SecurityGroups']),
+      instance['VPCId'],
+      ', '.join(instance['AvailabilityZones']),
+      get_listeners(instance.get('ListenerDescriptions')),
+      instance['CreatedTime'].strftime('%Y-%m-%d %H:%M')
+    ])
+
+  for instance in albs:
+    rows.append([
+      instance['Type'],
+      instance['LoadBalancerName'], 
+      instance['DNSName'],
+      instance['Scheme'],
+      ', '.join(instance.get('SecurityGroups', [])),
+      instance['VpcId'],
+      ', '.join([az['ZoneName'] for az in instance.get('AvailabilityZones', [])]),
+      '',
+      instance['CreatedTime'].strftime('%Y-%m-%d %H:%M')
+    ])
+
+  rows = sorted(rows, key=lambda p: p[0])
+  rows.insert(0, ['Type', 'Name', 'Endpoint', 'Scheme', 'SGs', 'VPC', 'AZs', 'Listeners', 'Created'])
+  return rows
+
+
+def main(argv):
+    region = 'us-east-1'
+    short = False
+    summary = False
+    
+    try:
+      opts, args = getopt.getopt(argv, "r:sc")
+
+      for opt, arg in opts:
+          if opt in('-r'):
+            region = REGIONS.get(arg, "us-east-1")            
+    except getopt.GetoptError as err:
+      print(err, file=sys.stderr)
+      sys.exit(2)
+
+    print("Region: " + region)
+    client = boto3.client('elb', region_name=region)
+    client_alb = boto3.client('elbv2', region_name=region)
+    print_table(print_instances(get_elbs(client), get_albs(client_alb)))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

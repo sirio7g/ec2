@@ -20,7 +20,8 @@ REGIONS = {
   "frankfurt": "eu-central-1",  
   "california": "us-west-1",
   "brazil": "sa-east-1",
-  "ohio": "us-east-2"
+  "ohio": "us-east-2",
+  "jakarta": "ap-southeast-3"  
 }
 
 is_descr = False

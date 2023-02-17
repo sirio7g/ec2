@@ -20,7 +20,8 @@ REGIONS = {
   "california": "us-west-1",
   "brazil": "sa-east-1",
   "ohio": "us-east-2",
-  "south-africa": "af-south-1"
+  "south-africa": "af-south-1",
+  "jakarta": "ap-southeast-3"  
 }
 
 
@@ -72,6 +73,7 @@ def print_instances(instances_list, short=False, summary=False):
         instance['DBSubnetGroup']['DBSubnetGroupName'],
         instance['DBInstanceClass'], 
         '%s GB' % instance['AllocatedStorage'],
+        '%s%s' % (instance['StorageType'], f" ({instance['Iops']} iops)" if instance['StorageType'] == "io1" else ""),
         '%s %s' % (instance['Engine'], instance['EngineVersion']), 
         instance['DBInstanceStatus'],
         instance['AvailabilityZone'] if instance['MultiAZ'] is False else ', '.join([instance['AvailabilityZone'], instance['SecondaryAvailabilityZone']]),
@@ -82,7 +84,8 @@ def print_instances(instances_list, short=False, summary=False):
         print_bool(instance['AutoMinorVersionUpgrade']),
         'Public' if instance['PubliclyAccessible'] == True else 'Private',      
         '%s:%s' % (instance['Endpoint']['Address'], instance['Endpoint']['Port']) if instance['Endpoint'] else ("", ""),
-        str(instance['BackupRetentionPeriod'])
+        str(instance['BackupRetentionPeriod']),
+        print_bool(instance['DeletionProtection'])
         ])
     else:
       rows.append([
@@ -100,7 +103,7 @@ def print_instances(instances_list, short=False, summary=False):
 
   if not summary:
     if short is False:
-      rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Storage', 'Engine', 'Status', 'AZs (1st, 2nd)', 'MultiAZ', 'Encrypted', 'VpcId', 'SG(s)', 'MinorUpdate', 'Scope', 'Endpoint', 'Backup'])
+      rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Storage', 'Type', 'Engine', 'Status', 'AZs (1st, 2nd)', 'MultiAZ', 'Encrypted', 'VpcId', 'SG(s)', 'MinorUpdate', 'Scope', 'Endpoint', 'Backup', 'DeletionProtection'])
     else:
       rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Engine', 'Status', 'MultiAZ', 'VpcId', 'Scope'])
   else:
@@ -111,7 +114,7 @@ def print_instances(instances_list, short=False, summary=False):
 
 
 def main(argv):
-    region = 'us-east-1'
+    region_list = ['us-east-1']
     short = False
     summary = False
     
@@ -120,7 +123,11 @@ def main(argv):
 
       for opt, arg in opts:
           if opt in('-r'):
-            region = REGIONS.get(arg, "us-east-1")            
+            if arg == "all":
+              region_list = REGIONS.values()
+            else:
+              print("Region: " + arg)
+              region_list = [REGIONS.get(arg, "us-east-1")]
           if opt in ('-s'):
             short = True
           if opt in ('-c'):
@@ -129,9 +136,12 @@ def main(argv):
       print(err, file=sys.stderr)
       sys.exit(2)
 
-    print("Region: " + region)
-    client = boto3.client('rds', region_name=region)
-    print_table(print_instances(get_rds_instances(client), short=short, summary=summary))
+
+    instances = []
+    for region in region_list:      
+      client = boto3.client('rds', region_name=region)
+      instances += get_rds_instances(client)
+    print_table(print_instances(instances, short=short, summary=summary))
 
 
 if __name__ == "__main__":
