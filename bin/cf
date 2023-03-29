@@ -28,14 +28,7 @@ REGIONS = {
   "brazil": "sa-east-1",
   "south-africa": "af-south-1",
   "ohio": "us-east-2",
-  "jakarta": "ap-southeast-3" 
-#  "aws-tok1": "ap-northeast-1",
-#  "aws-mum1": "ap-south-1",
-#  "aws-sin1": "ap-southeast-1",
-#  "aws-syd1": "ap-southeast-2",  
-#  "aws-fra1": "eu-central-1",  
-#  "aws-sao1": "sa-east-1",
-#  "aws-cap1": "af-south-1"
+  "jakarta": "ap-southeast-3"
 }
 
 class bcolors:
@@ -259,6 +252,8 @@ def print_change_set(client, change_set_name, stack_name):
 
 
 def bulk_change_set_analysis(change_sets):
+  summary = []
+  all_equal = True
   fingerprint = None
   for change_set in change_sets:
     client = change_set[0]
@@ -277,14 +272,22 @@ def bulk_change_set_analysis(change_sets):
       
       if fingerprint == None:
         fingerprint = "::".join(hashes)
+        summary.append([change_set[1], change_set[2], '::'.join(hashes)])
       else:
         rows.append([change_set[1], change_set[2], '::'.join(hashes)])
+        summary.append([change_set[1], change_set[2], '::'.join(hashes)])
         if fingerprint != "::".join(hashes):
-          print(tabulate(rows, ["Stack", "Change set", "Fingerprint"], tablefmt="plain"))
-          return False
+          if all_equal:
+            print("Not matching fingerprint:")            
+            print(tabulate(rows, ["Stack", "Change set", "Fingerprint"], tablefmt="plain"))
+          all_equal = False
     else:
       print(f"No changes detected for the stack {change_set[1]}")
-  return True
+
+  print("Summary:")
+  print(tabulate(summary, ["Stack", "Change set", "Fingerprint"], tablefmt="plain"))
+  print(f"Analised {len(summary)} stacks.\n")
+  return all_equal
 
 
 def print_status(status, reason):
@@ -535,7 +538,7 @@ def diff(client, stack_name, local_file):
   tmp_filename = "/tmp/remote_%s_%s" % (stack_name, time.time())  
   try:
     f = open(tmp_filename, "w")
-    f.write(response["TemplateBody"])
+    f.write(str(response["TemplateBody"]))
   finally:
     if f:
       f.close()
@@ -581,7 +584,7 @@ def download(client, stack_name):
   tmp_filename = "/tmp/%s_%s.yml" % (stack_name, time.time())
   try:
     f = open(tmp_filename, "w")
-    f.write(response["TemplateBody"])
+    f.write(str(response["TemplateBody"]))
     print(f"Downloaded template file {tmp_filename}")
   finally:
     if f:
