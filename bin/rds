@@ -19,9 +19,10 @@ REGIONS = {
   "frankfurt": "eu-central-1",  
   "california": "us-west-1",
   "brazil": "sa-east-1",
-  "ohio": "us-east-2",
   "south-africa": "af-south-1",
-  "jakarta": "ap-southeast-3"  
+  "ohio": "us-east-2",
+  "jakarta": "ap-southeast-3",
+  "stockholm": "eu-north-1"  
 }
 
 
@@ -73,7 +74,9 @@ def print_instances(instances_list, short=False, summary=False):
         instance['DBSubnetGroup']['DBSubnetGroupName'],
         instance['DBInstanceClass'], 
         '%s GB' % instance['AllocatedStorage'],
-        '%s%s' % (instance['StorageType'], f" ({instance['Iops']} iops)" if instance['StorageType'] == "io1" else ""),
+        '%s' % instance['StorageType'],
+        str(instance['Iops']) if instance['StorageType'] in ["io1", "gp3"] else "n/a",
+        str(instance.get('StorageThroughput', "n/a")) if instance['StorageType'] == "gp3" else "n/a",
         '%s %s' % (instance['Engine'], instance['EngineVersion']), 
         instance['DBInstanceStatus'],
         instance['AvailabilityZone'] if instance['MultiAZ'] is False else ', '.join([instance['AvailabilityZone'], instance['SecondaryAvailabilityZone']]),
@@ -85,7 +88,7 @@ def print_instances(instances_list, short=False, summary=False):
         'Public' if instance['PubliclyAccessible'] == True else 'Private',      
         '%s:%s' % (instance['Endpoint']['Address'], instance['Endpoint']['Port']) if instance['Endpoint'] else ("", ""),
         str(instance['BackupRetentionPeriod']),
-        print_bool(instance['DeletionProtection'])
+        print_bool(instance.get('DeletionProtection', None))
         ])
     else:
       rows.append([
@@ -103,7 +106,7 @@ def print_instances(instances_list, short=False, summary=False):
 
   if not summary:
     if short is False:
-      rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Storage', 'Type', 'Engine', 'Status', 'AZs (1st, 2nd)', 'MultiAZ', 'Encrypted', 'VpcId', 'SG(s)', 'MinorUpdate', 'Scope', 'Endpoint', 'Backup', 'DeletionProtection'])
+      rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Storage', 'Type', 'pIOPS', 'Throughput', 'Engine', 'Status', 'AZs (1st, 2nd)', 'MultiAZ', 'Encrypted', 'VpcId', 'SG(s)', 'MinorUpdate', 'Scope', 'Endpoint', 'Backup', 'DeletionProtection'])
     else:
       rows.insert(0, ['DB Identifier', 'Subnet group', 'Type', 'Engine', 'Status', 'MultiAZ', 'VpcId', 'Scope'])
   else:

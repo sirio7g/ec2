@@ -25,7 +25,8 @@ REGIONS = {
   "brazil": "sa-east-1",
   "south-africa": "af-south-1",
   "ohio": "us-east-2",
-  "jakarta": "ap-southeast-3"  
+  "jakarta": "ap-southeast-3",
+  "stockholm": "eu-north-1"  
 }
 
 

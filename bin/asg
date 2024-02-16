@@ -18,9 +18,10 @@ REGIONS = {
   "frankfurt": "eu-central-1",  
   "california": "us-west-1",
   "brazil": "sa-east-1",
-  "ohio": "us-east-2",
   "south-africa": "af-south-1",
-  "jakarta": "ap-southeast-3"  
+  "ohio": "us-east-2",
+  "jakarta": "ap-southeast-3",
+  "stockholm": "eu-north-1"  
 }
 
 def print_bool(bool_value):
@@ -132,7 +133,7 @@ def main(argv):
 
       for opt, arg in opts:
         if opt in('-r'):
-          region = REGIONS.get(arg, "us-east-1")
+          region = arg
         if opt in ('-s'):
           short = True
         if opt in ('-a'):
@@ -144,8 +145,15 @@ def main(argv):
       print(err, file=sys.stderr)
       sys.exit(2)
 
-    print("Region: " + region)
-    client = boto3.client('autoscaling', region_name=region)
+    if region == "all":
+      for region in REGIONS.values():
+        client = boto3.client('autoscaling', region_name=region)
+        print_table(print_asgs(get_asgs(client, asg_name), short=short))
+      return
+
+    region_name = REGIONS.get(region, "us-east-1")
+    print("Region: " + region_name)
+    client = boto3.client('autoscaling', region_name=region_name)
 
     if asg_name is None:
       print_table(print_asgs(get_asgs(client, asg_name), short=short))

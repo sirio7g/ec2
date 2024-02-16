@@ -28,7 +28,8 @@ REGIONS = {
   "brazil": "sa-east-1",
   "south-africa": "af-south-1",
   "ohio": "us-east-2",
-  "jakarta": "ap-southeast-3"
+  "jakarta": "ap-southeast-3",
+  "stockholm": "eu-north-1"  
 }
 
 class bcolors:
@@ -593,12 +594,22 @@ def download(client, stack_name):
   return tmp_filename
 
 
-def print_all_params(client):
+def print_all_params(client, filter):
+  if filter is not None:
+    pattern = re.compile(filter)
+  else:
+    pattern = None
+
   rows = []
   for stack in get_stacks(client):
-    if stack.get("Parameters") is not None:
-      for param in sorted(stack['Parameters'], key = lambda i: i['ParameterKey']) :
-          rows.append([stack['StackName'], param["ParameterKey"], param["ParameterValue"]])    
+    to_include = True
+    if pattern and not pattern.match(stack['StackName']):
+      to_include = False
+
+    if to_include:
+      if stack.get("Parameters") is not None:
+        for param in sorted(stack['Parameters'], key = lambda i: i['ParameterKey']) :
+            rows.append([stack['StackName'], param["ParameterKey"], param["ParameterValue"]])    
 
   print(tabulate(rows, ["Stack name", "Param Name", "Param Value"], tablefmt="plain"))
 
@@ -643,6 +654,12 @@ def main(argv):
   parser_bulk_update.add_argument("-b", "--bucket-names", default=None, help="Comma separated key value params of regional S3 buckets e.g. us-east=cf-bucket-us-east,singapore=cf-bucket-singapore.", required=True)
   parser_bulk_update.add_argument("-e", "--exclude", default=None, help="Exclude stacks which name matches the given regular expression", required=False)
 
+  parser_bulk_update_params = subparsers.add_parser("bulk-update-params", help="Update params without changing the template file")
+  parser_bulk_update_params.add_argument("stack_name", default=None, help="The name of the existing stack")
+  parser_bulk_update_params.add_argument("-p", "--params", default=None, help="Comma separated key value params e.g. Key=Value,Key2=Value2. Those will be added to the existing ones", required=False)
+  parser_bulk_update_params.add_argument("-b", "--bucket-names", default=None, help="Comma separated key value params of regional S3 buckets e.g. us-east=cf-bucket-us-east,singapore=cf-bucket-singapore.", required=True)
+  parser_bulk_update_params.add_argument("-e", "--exclude", default=None, help="Exclude stacks which name matches the given regular expression", required=False)
+
   parser_getparams = subparsers.add_parser("params", help="List stack parameters")
   parser_getparams.add_argument("stack_name", default=None, help="The name of the existing stack")
   parser_getparams.add_argument("-f", "--to-file", default=None, help="Print params list into a given filename (format used by aws cli)", required=False)
@@ -657,7 +674,8 @@ def main(argv):
   parser_vi = subparsers.add_parser("vi", help="Open the downloaded template by read-only vim")
   parser_vi.add_argument("stack_name", default=None, help="The name of the existing stack")
 
-  subparsers.add_parser("print-all-params", help="Print all params for all stacks in the given region (to use in combination with 'grep')")
+  print_all = subparsers.add_parser("print-all-params", help="Print all params for all stacks in the given region (to use in combination with 'grep')")
+  print_all.add_argument("-i", "--include", default=None, help="Include stacks which name matches the given regular expression", required=False)
 
   list_all = subparsers.add_parser("list", help="List CloudFormation stacks")
   list_all.add_argument("-i", "--include", default=None, help="Include stacks which name matches the given regular expression", required=False)
@@ -678,6 +696,8 @@ def main(argv):
 
   if args.command_name == "bulk-update":
     bulk_update(args.stack_name, args.template_file, args.bucket_names, args.params, regions, args.exclude)
+  elif args.command_name == "bulk-update-params":
+    bulk_update(args.stack_name, None, args.bucket_names, args.params, regions, args.exclude)
   else:
     for region_name in regions:
       region = REGIONS.get(region_name, region_name)
@@ -702,7 +722,7 @@ def main(argv):
       elif args.command_name == "vi":
         vi(client, args.stack_name)
       elif args.command_name == "print-all-params":
-        print_all_params(client)
+        print_all_params(client, args.include)
       else:
         print_table(print_stacks(get_stacks(client), filter=args.include))
 

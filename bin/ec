@@ -19,10 +19,11 @@ REGIONS = {
   "frankfurt": "eu-central-1",  
   "california": "us-west-1",
   "brazil": "sa-east-1",
+  "south-africa": "af-south-1",
   "ohio": "us-east-2",
-  "jakarta": "ap-southeast-3"  
+  "jakarta": "ap-southeast-3",
+  "stockholm": "eu-north-1"  
 }
-
 
 def print_bool(bool_value):
   return 'Yes' if bool_value == True else 'No'
@@ -101,16 +102,28 @@ def main(argv):
 
       for opt, arg in opts:
           if opt in('-r'):
-            region = REGIONS.get(arg, "us-east-1")            
+            if arg == "all":
+              region = "all"
+            elif arg != "":
+              region = REGIONS.get(arg, "us-east-1")
+            else:
+              region = "us-east-1"
           if opt in ('-s'):
             short = True
     except getopt.GetoptError as err:
       print(err, file=sys.stderr)
       sys.exit(2)
 
-    print("Region: " + region)
-    client = boto3.client('elasticache', region_name=region)
-    print_table(print_instances(get_cache_instances(client), short=short))
+    if region == "all":
+      for region_name in REGIONS.values():
+        print("Region: " + region_name)    
+        client = boto3.client('elasticache', region_name=region_name)
+        print_table(print_instances(get_cache_instances(client), short=short))
+    else:
+      print("Region: " + region)    
+      client = boto3.client('elasticache', region_name=region)
+      print_table(print_instances(get_cache_instances(client), short=short))
+
 
 
 # run program
